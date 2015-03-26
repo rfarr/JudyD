@@ -4,6 +4,7 @@ import std.array;
 import std.conv;
 import std.range;
 import std.stdio;
+import std.string;
 
 extern(C)
 {
@@ -65,14 +66,82 @@ extern(C)
     int JudyLPrevEmpty(const void* array, size_t* index, Error* err);
 }
 
+struct JudyArraySlice(Value)
+{
+    public:
+
+        this(const ref void* array)
+        {
+            this.array = array;
+            startIndex = 0;
+            endIndex = -1;
+
+            frontPtr = cast(Value**)JudyLFirst(array, &startIndex, PJE0);
+            backPtr = cast(Value**)JudyLLast(array, &endIndex, PJE0);
+        }
+
+        this (const ref void* array, size_t startIndex, size_t endIndex)
+        {
+            this.array = array;
+            this.startIndex = startIndex;
+            this.endIndex = endIndex;
+
+            frontPtr = cast(Value**)JudyLGet(array, startIndex, PJE0);
+            backPtr = cast(Value**)JudyLGet(array, endIndex, PJE0);
+        }
+
+        bool empty() const
+        {
+            return startIndex > endIndex;
+        }
+
+        Value* front()
+        {
+            return *frontPtr;
+        }
+
+        void popFront()
+        {
+            frontPtr = cast(Value**)JudyLNext(array, &startIndex, PJE0);
+        }
+
+        Value* back()
+        {
+            return *backPtr;
+        }
+
+        void popBack()
+        {
+            backPtr = cast(Value**)JudyLPrev(array, &endIndex, PJE0);
+        }
+
+        JudyArraySlice!Value save()
+        {
+            return this;
+        }
+
+
+    private:
+        Value** frontPtr;
+        Value** backPtr;
+        size_t startIndex;
+        size_t endIndex;
+        const void* array;
+}
+
 struct JudyArray(Value)
 {
     public:
 
+        ~this()
+        {
+            JudyLFreeArray(&array, PJE0);
+        }
+
         Value* front()
         {
             size_t index = 0;
-            Value** element = cast(Value**)JudyLFirst(array, &index, PJE0);
+            auto element = cast(Value**)JudyLFirst(array, &index, PJE0);
 
             if (element is null)
             {
@@ -85,7 +154,7 @@ struct JudyArray(Value)
         Value* back()
         {
             size_t index = -1;
-            Value** element = cast(Value**)JudyLLast(array, &index, PJE0);
+            auto element = cast(Value**)JudyLLast(array, &index, PJE0);
 
             if (element is null)
             {
@@ -93,6 +162,21 @@ struct JudyArray(Value)
             }
 
             return *element;
+        }
+
+        JudyArraySlice!Value opSlice()
+        {
+            return JudyArraySlice!Value(array);
+        }
+
+        JudyArraySlice!Value opSlice(size_t start, size_t end)
+        {
+            return JudyArraySlice!Value(array, start, end);
+        }
+
+        size_t opDollar()
+        {
+            return length() - 1;
         }
 
         bool remove(const size_t index)
@@ -118,21 +202,19 @@ struct JudyArray(Value)
         void opIndexAssign(Value* value, const size_t index)
         {
             auto element = cast(Value**)JudyLIns(&array, index, PJE0);
-
             *element = value;
         }
 
         @property size_t length() const
         {
-            auto count = JudyLCount(array, 0, -1, PJE0);
-
-            return count;
+            return JudyLCount(array, 0, -1, PJE0);
         }
 
     private:
         void* array;
 }
 
+// Test basic insert and remove
 unittest
 {
     auto array = JudyArray!string();
@@ -190,4 +272,136 @@ unittest
     assert(array.length == --len);
 
 
+}
+
+// Test memory free
+unittest
+{
+    auto array = JudyArray!string();
+
+    auto testrange = iota(0, 100);
+
+    // Alocate storage for the string values on the stack
+    string[int] strings = assocArray(
+        zip(
+            testrange,
+            map!(a => to!string(a))(testrange).array
+        )
+    );
+
+    // Insert some elements
+    foreach(i; testrange)
+    {
+        array[i] = &strings[i];
+    }
+
+    assert(array.length == 100);
+
+    // Double free
+    array.destroy();
+    array.destroy();
+
+    assert(array.length == 0);
+
+}
+
+// Verify opSlice[]
+unittest
+{
+    auto array = JudyArray!string();
+
+    auto testrange = iota(0, 100);
+
+    // Alocate storage for the string values on the stack
+    string[int] strings = assocArray(
+        zip(
+            testrange,
+            map!(a => to!string(a))(testrange).array
+        )
+    );
+    
+    // Insert some elements
+    foreach(i; testrange)
+    {
+        array[i] = &strings[i];
+    }
+
+    auto j = 0;
+    foreach(str; array[])
+    {
+        assert(*str == strings[j++]);
+    }
+
+    // Verify first slice iteration was idempotent
+    j = 0;
+    foreach(str; array[])
+    {
+        assert(*str == strings[j++]);
+    }
+}
+
+// Verify opSlice[x..y]
+unittest
+{
+    auto array = JudyArray!string();
+
+    auto testrange = iota(0, 100);
+
+    // Alocate storage for the string values on the stack
+    string[int] strings = assocArray(
+        zip(
+            testrange,
+            map!(a => to!string(a))(testrange).array
+        )
+    );
+    
+    // Insert some elements
+    foreach(i; testrange)
+    {
+        array[i] = &strings[i];
+    }
+
+    auto j = 20;
+    foreach(str; array[20..30])
+    {
+        assert(*str == strings[j++]);
+    }
+
+    j = 25;
+    foreach(str; array[25..99])
+    {
+        assert(*str == strings[j++]);
+    }
+
+    j = 90;
+    foreach(str; array[90..$])
+    {
+        assert(*str == strings[j++]);
+    }
+}
+
+// Verify opSlice[$-1]
+unittest
+{
+    auto array = JudyArray!string();
+
+    auto testrange = iota(0, 100);
+
+    // Alocate storage for the string values on the stack
+    string[int] strings = assocArray(
+        zip(
+            testrange,
+            map!(a => to!string(a))(testrange).array
+        )
+    );
+    
+    // Insert some elements
+    foreach(i; testrange)
+    {
+        array[i] = &strings[i];
+    }
+
+    array[$-1] = &strings[0];
+
+    assert(*array[98] == strings[0]);
 }
