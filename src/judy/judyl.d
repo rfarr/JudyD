@@ -611,6 +611,12 @@ unittest
         assert(str.value == strings[j++], "Indexed slice");
     }
 
+    j = 20;
+    foreach(ref str; array[20..500])
+    {
+        assert(str.value == strings[j++], "Indexed slice beyond population");
+    }
+
     j = 90;
     foreach(ref str; array[90..$])
     {
