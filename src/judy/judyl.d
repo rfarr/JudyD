@@ -2,6 +2,7 @@ module judy.judyl;
 
 import std.array;
 import std.range;
+import std.string;
 
 import judy.external;
 
@@ -16,12 +17,32 @@ class ElementNotFoundException : Exception
 struct JudyLArray(ElementType)
 {
     private:
-        void* array;
+        void* array_;
+
+        struct JudyLEntry(ElementType)
+        {
+            public:
+                size_t index;
+                ElementType value;
+
+                this(size_t index, ref ElementType value)
+                {
+                    this.index = index;
+                    this.value = value;
+                }
+
+                string toString()
+                {
+                    return format("%s: (%s) '%s'", index, ElementType.stringof, value);
+                }
+        }
+        alias Entry = JudyLEntry!ElementType;
+
 
     public:
         ~this()
         {
-            JudyLFreeArray(&array, NO_ERROR);
+            JudyLFreeArray(&array_, NO_ERROR);
         }
 
         @property bool empty() const
@@ -32,12 +53,12 @@ struct JudyLArray(ElementType)
         /* Returns number of elements in the Judy array */
         @property size_t length() const
         {
-            return JudyLCount(array, 0, -1, NO_ERROR);
+            return JudyLCount(array_, 0, -1, NO_ERROR);
         }
 
 
 
-        @property ref ElementType front() const
+        @property Entry front() const
         in
         {
             assert(!empty);
@@ -45,7 +66,9 @@ struct JudyLArray(ElementType)
         body
         {
             size_t index = 0;
-            return **cast(ElementType**)JudyLFirst(array, &index, NO_ERROR);
+            auto value = **cast(ElementType**)JudyLFirst(array_, &index, NO_ERROR);
+
+            return Entry(index, value);
         }
 
         void popFront()
@@ -56,13 +79,13 @@ struct JudyLArray(ElementType)
         body
         {
             size_t index = 0;
-            JudyLFirst(array, &index, NO_ERROR);
-            JudyLDel(&array, index, NO_ERROR);
+            JudyLFirst(array_, &index, NO_ERROR);
+            JudyLDel(&array_, index, NO_ERROR);
         }
 
 
 
-        @property ref ElementType back() const
+        @property Entry back() const
         in
         {
             assert(!empty);
@@ -70,7 +93,9 @@ struct JudyLArray(ElementType)
         body
         {
             size_t index = -1;
-            return **cast(ElementType**)JudyLLast(array, &index, NO_ERROR);
+            auto value = **cast(ElementType**)JudyLLast(array_, &index, NO_ERROR);
+
+            return Entry(index, value);
         }
 
         void popBack()
@@ -81,34 +106,37 @@ struct JudyLArray(ElementType)
         body
         {
             size_t index = -1;
-            JudyLLast(array, &index, NO_ERROR);
-            JudyLDel(&array, index, NO_ERROR);
+            JudyLLast(array_, &index, NO_ERROR);
+            JudyLDel(&array_, index, NO_ERROR);
         }
 
 
 
         @property JudyLArrayRange!ElementType save() const
         {
-            return JudyLArrayRange!ElementType(array);
+            return JudyLArrayRange!ElementType(array_);
         }
 
 
 
         auto opSlice() const
         {
-            return JudyLArrayRange!ElementType(array);
+            return JudyLArrayRange!ElementType(array_);
         }
 
         auto opSlice(const size_t start, const size_t end) const
         {
-            return JudyLArrayRange!ElementType(array, start, end);
+            return JudyLArrayRange!ElementType(array_, start, end);
         }
 
         /* Get the last index of the array */
         size_t opDollar() const
         {
             size_t index = -1;
-            JudyLLast(array, &index, NO_ERROR);
+            if (JudyLLast(array_, &index, NO_ERROR) is null)
+            {
+                throw new RangeError();
+            }
             return index;
         }
 
@@ -116,7 +144,7 @@ struct JudyLArray(ElementType)
 
         ref ElementType opIndex(const size_t index) const
         {
-            auto element = cast(ElementType**)JudyLGet(array, index, NO_ERROR);
+            auto element = cast(ElementType**)JudyLGet(array_, index, NO_ERROR);
 
             if (element is null)
             {
@@ -130,7 +158,7 @@ struct JudyLArray(ElementType)
 
         void opIndexAssign(ref ElementType value, const size_t index)
         {
-            auto element = cast(ElementType**)JudyLIns(&array, index, NO_ERROR);
+            auto element = cast(ElementType**)JudyLIns(&array_, index, NO_ERROR);
             *element = &value;
         }
 
@@ -146,18 +174,18 @@ struct JudyLArray(ElementType)
         }
         body
         {
-            return JudyLDel(&array, index, NO_ERROR) == 1;
+            return JudyLDel(&array_, index, NO_ERROR) == 1;
         }
 
         bool has(const size_t index)
         {
-            return JudyLGet(array, index, NO_ERROR) !is null;
+            return JudyLGet(array_, index, NO_ERROR) !is null;
         }
 
         /* Search functions for finding elements */
         bool first(ref size_t index, ref ElementType found) const
         {
-            auto value = cast(ElementType**)JudyLFirst(array, &index, NO_ERROR);
+            auto value = cast(ElementType**)JudyLFirst(array_, &index, NO_ERROR);
             if (value == null)
             {
                 return false;
@@ -168,7 +196,7 @@ struct JudyLArray(ElementType)
 
         bool next(ref size_t index, ref ElementType found) const
         {
-            auto value = cast(ElementType**)JudyLNext(array, &index, NO_ERROR);
+            auto value = cast(ElementType**)JudyLNext(array_, &index, NO_ERROR);
             if (value == null)
             {
                 return false;
@@ -179,7 +207,7 @@ struct JudyLArray(ElementType)
 
         bool prev(ref size_t index, ref ElementType found) const
         {
-            auto value = cast(ElementType**)JudyLPrev(array, &index, NO_ERROR);
+            auto value = cast(ElementType**)JudyLPrev(array_, &index, NO_ERROR);
             if (value == null)
             {
                 return false;
@@ -190,7 +218,7 @@ struct JudyLArray(ElementType)
 
         bool last(ref size_t index, ref ElementType found) const
         {
-            auto value = cast(ElementType**)JudyLLast(array, &index, NO_ERROR);
+            auto value = cast(ElementType**)JudyLLast(array_, &index, NO_ERROR);
             if (value == null)
             {
                 return false;
@@ -203,128 +231,134 @@ struct JudyLArray(ElementType)
         /* Search functions for finding empty */
         bool firstEmpty(ref size_t index) const
         {
-            return JudyLFirstEmpty(array, &index, NO_ERROR) == 1;
+            return JudyLFirstEmpty(array_, &index, NO_ERROR) == 1;
         }
 
         bool nextEmpty(ref size_t index) const
         {
-            return JudyLNextEmpty(array, &index, NO_ERROR) == 1;
+            return JudyLNextEmpty(array_, &index, NO_ERROR) == 1;
         }
 
         bool prevEmpty(ref size_t index) const
         {
-            return JudyLPrevEmpty(array, &index, NO_ERROR) == 1;
+            return JudyLPrevEmpty(array_, &index, NO_ERROR) == 1;
         }
 
         bool lastEmpty(ref size_t index) const
         {
-            return JudyLLastEmpty(array, &index, NO_ERROR) == 1;
+            return JudyLLastEmpty(array_, &index, NO_ERROR) == 1;
         }
 
         @property size_t memUsed() const
         {
-            return JudyLMemUsed(array);
+            return JudyLMemUsed(array_);
         }
 
         @property size_t memActive() const
         {
-            return JudyLMemActive(array);
+            return JudyLMemActive(array_);
         }
+
 
 
         /* Iteration struct, allows fast read only iteration of the underlying Judy array */
         struct JudyLArrayRange(ElementType)
         {
             private:
-                ElementType** frontPtr;
-                ElementType** backPtr;
-                size_t firstIndex;
-                size_t lastIndex;
-                const void* array;
+                ElementType** frontPtr_;
+                ElementType** backPtr_;
+                size_t firstIndex_;
+                size_t lastIndex_;
+                const void* array_;
 
             public:
                 this(const ref void* array)
                 {
-                    this.array = array;
-                    this.firstIndex = 0;
-                    this.lastIndex = -1;
+                    array_ = array;
+                    firstIndex_ = 0;
+                    lastIndex_ = -1;
 
-                    frontPtr = cast(ElementType**)JudyLFirst(array, &firstIndex, NO_ERROR);
-                    backPtr = cast(ElementType**)JudyLLast(array, &lastIndex, NO_ERROR);
+                    frontPtr_ = cast(ElementType**)JudyLFirst(array_, &firstIndex_, NO_ERROR);
+                    backPtr_ = cast(ElementType**)JudyLLast(array_, &lastIndex_, NO_ERROR);
 
                     // Empty
-                    if (frontPtr is null || backPtr is null)
+                    if (frontPtr_ is null || backPtr_ is null)
                     {
-                        this.firstIndex = this.lastIndex = 0;
+                        firstIndex_ = lastIndex_ = 0;
                     }
                 }
 
                 this (const ref void* array, const ref size_t firstIndex, const ref size_t lastIndex)
                 {
-                    this.array = array;
-                    this.firstIndex = firstIndex;
-                    this.lastIndex = lastIndex;
+                    array_ = array;
+                    firstIndex_ = firstIndex;
+                    lastIndex_ = lastIndex;
 
-                    frontPtr = cast(ElementType**)JudyLGet(array, firstIndex, NO_ERROR);
-                    backPtr = cast(ElementType**)JudyLGet(array, lastIndex, NO_ERROR);
+                    frontPtr_ = cast(ElementType**)JudyLGet(array, firstIndex_, NO_ERROR);
+                    backPtr_ = cast(ElementType**)JudyLGet(array, lastIndex_, NO_ERROR);
 
                     // Empty
-                    if (frontPtr is null || backPtr is null)
+                    if (frontPtr_ is null || backPtr_ is null)
                     {
-                        this.firstIndex = this.lastIndex = 0;
+                        firstIndex_ = lastIndex_ = 0;
                     }
                 }
 
                 @property bool empty() const
                 {
-                    return firstIndex == lastIndex;
+                    return firstIndex_ == lastIndex_;
                 }
 
-                @property ref ElementType front()
+                @property Entry front()
                 in
                 {
                     assert(!empty);
                 }
                 body
                 {
-                    return **frontPtr;
+                    return Entry(firstIndex_, **frontPtr_);
                 }
 
                 void popFront()
                 {
-                    frontPtr = cast(ElementType**)JudyLNext(array, &firstIndex, NO_ERROR);
+                    frontPtr_ = cast(ElementType**)JudyLNext(array_, &firstIndex_, NO_ERROR);
                 }
 
-                @property ref ElementType back()
+                @property Entry back()
                 in
                 {
                     assert(!empty);
                 }
                 body
                 {
-                    return **backPtr;
+                    return Entry(lastIndex_, **backPtr_);
                 }
 
                 void popBack()
                 {
-                    backPtr = cast(ElementType**)JudyLPrev(array, &lastIndex, NO_ERROR);
+                    backPtr_ = cast(ElementType**)JudyLPrev(array_, &lastIndex_, NO_ERROR);
                 }
 
                 ref ElementType opIndex(const size_t index) const
                 {
-                    if (index < firstIndex || index > lastIndex)
+                    if (index < firstIndex_ || index > lastIndex_)
                     {
                         throw new RangeError();
                     }
 
-                    auto element = cast(ElementType**)JudyLGet(array, index, NO_ERROR);
+                    auto element = cast(ElementType**)JudyLGet(array_, index, NO_ERROR);
 
                     if (element is null)
                     {
-                        throw new ElementNotFoundException(index);
+                        throw new RangeError();
                     }
 
                     return **element;
+                }
+
+                size_t opDollar()
+                {
+                    return back.index;
                 }
 
                 @property JudyLArrayRange!ElementType save()
@@ -334,7 +368,7 @@ struct JudyLArray(ElementType)
 
                 @property auto length() const
                 {
-                    return JudyLCount(array, firstIndex, lastIndex, NO_ERROR);
+                    return JudyLCount(array_, firstIndex_, lastIndex_, NO_ERROR);
                 }
         }
 }
@@ -345,7 +379,6 @@ version(unittest)
     import std.conv;
     import std.exception;
     import std.stdio;
-    import std.string;
 }
 
 unittest
@@ -376,8 +409,10 @@ unittest
     }
 
     // Verify front and back
-    assert(array.front == "100", "Correct front");
-    assert(array.back == "990", "Correct back");
+    assert(array.front.index == 100, "Correct front");
+    assert(array.front.value == "100", "Correct front");
+    assert(array.back.index == 990, "Correct back");
+    assert(array.back.value == "990", "Correct back");
 
     // Verify elements by opIndex
     foreach(i; testrange)
@@ -388,33 +423,40 @@ unittest
 
     // Verify elements by inputRange
     auto j = 0;
-    foreach(str; array)
+    foreach(ref str; array)
     {
-        assert(str == strings[testrange[j++]], "Iteration via inputRange");
+        assert(str.index == testrange[j], "Iteration via inputRange");
+        assert(str.value == strings[testrange[j++]], "Iteration via inputRange");
     }
 
     // Remove front
     array.remove(100);
     assertThrown!ElementNotFoundException(array[100], "Element not found");
     assert(!array.has(100), "Element removed");
-    assert(array.front == "110", "Front updated");
-    assert(array.back == "990", "Back unchanged");
+    assert(array.front.index == 110, "Front updated");
+    assert(array.front.value == "110", "Front updated");
+    assert(array.back.index == 990, "Back unchanged");
+    assert(array.back.value == "990", "Back unchanged");
     assert(array.length == --len, "Length updated");
 
     // Remove back
     array.remove(990);
     assertThrown!ElementNotFoundException(array[990], "Element not found");
     assert(!array.has(990), "Element removed");
-    assert(array.front == "110", "Front unchanged");
-    assert(array.back == "980", "Back updated");
+    assert(array.front.index == 110, "Front unchanged");
+    assert(array.front.value == "110", "Front unchanged");
+    assert(array.back.index == 980, "Back updated");
+    assert(array.back.value == "980", "Back updated");
     assert(array.length == --len, "Length updated");
 
     // Remove middle
     array.remove(550);
     assertThrown!ElementNotFoundException(array[550], "Element not found");
     assert(!array.has(550), "Element removed");
-    assert(array.front == "110", "Front unchanged");
-    assert(array.back == "980", "Back updated");
+    assert(array.front.index == 110, "Front unchanged");
+    assert(array.front.value == "110", "Front unchanged");
+    assert(array.back.index == 980, "Back updated");
+    assert(array.back.value == "980", "Back updated");
     assert(array.length == --len, "Length updated");
 
     auto newrange = testrange.filter!(a => a != 100 && a != 550 && a != 990).array;
@@ -427,9 +469,10 @@ unittest
 
     // Verify elements by inputRange
     j = 0;
-    foreach(str; array)
+    foreach(ref str; array)
     {
-        assert(str == strings[newrange[j++]], "Iteration via inputRange");
+        assert(str.index == newrange[j], "Iteration via inputRange");
+        assert(str.value == strings[newrange[j++]], "Iteration via inputRange");
     }
 }
 
@@ -498,10 +541,10 @@ unittest
     // Test one element
     array[0] = strings[0];
     size_t j = 0;
-    foreach(str; array[])
+    foreach(ref str; array[])
     {
         assert(j == 0, "Called once");
-        assert(str == strings[j++]);
+        assert(str.value == strings[j++]);
     }
     array.remove(0);
     
@@ -512,16 +555,16 @@ unittest
     }
 
     j = 0;
-    foreach(str; array[])
+    foreach(ref str; array[])
     {
-        assert(str == strings[j++], "Forward range iteration");
+        assert(str.value == strings[j++], "Forward range iteration");
     }
 
     // backwards iteration
     j = array.length;
-    foreach(str; retro(array[]))
+    foreach(ref str; retro(array[]))
     {
-        assert(str == strings[--j], "Retrograde range iteration");
+        assert(str.value == strings[--j], "Retrograde range iteration");
     }
 
     auto slice = array[];
@@ -560,10 +603,10 @@ unittest
     // Test one element
     array[0] = strings[0];
     size_t j = 0;
-    foreach(str; array[0..5])
+    foreach(ref str; array[0..5])
     {
         assert(j == 0, "Called once");
-        assert(str == strings[j++]);
+        assert(str.value == strings[j++]);
     }
     array.remove(0);
     
@@ -574,21 +617,21 @@ unittest
     }
 
     j = 20;
-    foreach(str; array[20..30])
+    foreach(ref str; array[20..30])
     {
-        assert(str == strings[j++], "Indexed slice");
+        assert(str.value == strings[j++], "Indexed slice");
     }
 
     j = 90;
-    foreach(str; array[90..$])
+    foreach(ref str; array[90..$])
     {
-        assert(str == strings[j++], "OpDollar slice");
+        assert(str.value == strings[j++], "OpDollar slice");
     }
 
     j = 20;
-    foreach(str; retro(array[10..20]))
+    foreach(ref str; retro(array[10..20]))
     {
-        assert(str == strings[j--], "Retrograde slice");
+        assert(str.value == strings[j--], "Retrograde slice");
     }
 
     assertThrown!RangeError(array[10..20][9], "Out of bounds");
@@ -601,15 +644,23 @@ unittest
 
     auto array = JudyLArray!string();
 
-    auto testrange = iota(0, 100, 5);
+    auto testrange = iota(0, 100UL, 5);
 
     // Alocate storage for the string values on the stack
-    string[int] strings = assocArray(
+    string[size_t] strings = assocArray(
         zip(
             testrange,
             map!(a => to!string(a))(testrange).array
         )
     );
+
+    // Test empty
+    assertThrown!RangeError(array[$] = strings[0], "Out of bounds");
+
+    // Test one element
+    array[0] = strings[0];
+    assert(array[$] == strings[0]);
+    array.remove(0);
     
     // Insert some elements
     foreach(i; testrange)
