@@ -246,11 +246,17 @@ struct JudyLArray(ElementType)
                 this(const ref void* array)
                 {
                     this.array = array;
-                    firstIndex = 0;
-                    lastIndex = -1;
+                    this.firstIndex = 0;
+                    this.lastIndex = -1;
 
                     frontPtr = cast(ElementType**)JudyLFirst(array, &firstIndex, NO_ERROR);
                     backPtr = cast(ElementType**)JudyLLast(array, &lastIndex, NO_ERROR);
+
+                    // Empty
+                    if (frontPtr is null || backPtr is null)
+                    {
+                        this.firstIndex = this.lastIndex = 0;
+                    }
                 }
 
                 this (const ref void* array, const ref size_t firstIndex, const ref size_t lastIndex)
@@ -261,6 +267,12 @@ struct JudyLArray(ElementType)
 
                     frontPtr = cast(ElementType**)JudyLGet(array, firstIndex, NO_ERROR);
                     backPtr = cast(ElementType**)JudyLGet(array, lastIndex, NO_ERROR);
+
+                    // Empty
+                    if (frontPtr is null || backPtr is null)
+                    {
+                        this.firstIndex = this.lastIndex = 0;
+                    }
                 }
 
                 @property bool empty() const
@@ -476,6 +488,22 @@ unittest
             map!(a => to!string(a))(testrange).array
         )
     );
+
+    // Test empty
+    foreach(str; array[])
+    {
+        assert(false, "empty array");
+    }
+
+    // Test one element
+    array[0] = strings[0];
+    size_t j = 0;
+    foreach(str; array[])
+    {
+        assert(j == 0, "Called once");
+        assert(str == strings[j++]);
+    }
+    array.remove(0);
     
     // Insert some elements
     foreach(i; testrange)
@@ -483,7 +511,7 @@ unittest
         array[i] = strings[i];
     }
 
-    size_t j = 0;
+    j = 0;
     foreach(str; array[])
     {
         assert(str == strings[j++], "Forward range iteration");
@@ -513,15 +541,31 @@ unittest
 
     auto array = JudyLArray!string();
 
-    auto testrange = iota(0, 100);
+    auto testrange = iota(0, 100UL);
 
     // Alocate storage for the string values on the stack
-    string[int] strings = assocArray(
+    string[size_t] strings = assocArray(
         zip(
             testrange,
             map!(a => to!string(a))(testrange).array
         )
     );
+
+    // Test empty
+    foreach(str; array[1..2])
+    {
+        assert(false, "empty array");
+    }
+
+    // Test one element
+    array[0] = strings[0];
+    size_t j = 0;
+    foreach(str; array[0..5])
+    {
+        assert(j == 0, "Called once");
+        assert(str == strings[j++]);
+    }
+    array.remove(0);
     
     // Insert some elements
     foreach(i; testrange)
@@ -529,7 +573,7 @@ unittest
         array[i] = strings[i];
     }
 
-    auto j = 20;
+    j = 20;
     foreach(str; array[20..30])
     {
         assert(str == strings[j++], "Indexed slice");
