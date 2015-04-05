@@ -1,18 +1,11 @@
 module judy.judyl;
 
+import core.exception;
 import std.array;
 import std.range;
 import std.string;
 
 import judy.external;
-
-class ElementNotFoundException : Exception
-{
-    this(const size_t index)
-    {
-        super(format("Element at index (%s) not found", index));
-    }
-}
 
 struct JudyLArray(ElementType)
 {
@@ -148,7 +141,7 @@ struct JudyLArray(ElementType)
 
             if (element is null)
             {
-                throw new ElementNotFoundException(index);
+                throw new RangeError();
             }
 
             return **element;
@@ -274,28 +267,17 @@ struct JudyLArray(ElementType)
             public:
                 this(const ref void* array)
                 {
-                    array_ = array;
-                    firstIndex_ = 0;
-                    lastIndex_ = -1;
-
-                    frontPtr_ = cast(ElementType**)JudyLFirst(array_, &firstIndex_, NO_ERROR);
-                    backPtr_ = cast(ElementType**)JudyLLast(array_, &lastIndex_, NO_ERROR);
-
-                    // Empty
-                    if (frontPtr_ is null || backPtr_ is null)
-                    {
-                        firstIndex_ = lastIndex_ = 0;
-                    }
+                    this(array, 0UL, -1UL);
                 }
 
-                this (const ref void* array, const ref size_t firstIndex, const ref size_t lastIndex)
+                this (const ref void* array, const size_t firstIndex, const size_t lastIndex)
                 {
                     array_ = array;
                     firstIndex_ = firstIndex;
                     lastIndex_ = lastIndex;
 
-                    frontPtr_ = cast(ElementType**)JudyLGet(array, firstIndex_, NO_ERROR);
-                    backPtr_ = cast(ElementType**)JudyLGet(array, lastIndex_, NO_ERROR);
+                    frontPtr_ = cast(ElementType**)JudyLFirst(array, &firstIndex_, NO_ERROR);
+                    backPtr_ = cast(ElementType**)JudyLLast(array, &lastIndex_, NO_ERROR);
 
                     // Empty
                     if (frontPtr_ is null || backPtr_ is null)
@@ -400,6 +382,11 @@ unittest
         )
     );
 
+    foreach(str; array)
+    {
+        assert(false, "Empty array");
+    }
+
     // Insert some elements
     auto len = 0;
     foreach(i; testrange)
@@ -431,7 +418,7 @@ unittest
 
     // Remove front
     array.remove(100);
-    assertThrown!ElementNotFoundException(array[100], "Element not found");
+    assertThrown!RangeError(array[100], "Element not found");
     assert(!array.has(100), "Element removed");
     assert(array.front.index == 110, "Front updated");
     assert(array.front.value == "110", "Front updated");
@@ -441,7 +428,7 @@ unittest
 
     // Remove back
     array.remove(990);
-    assertThrown!ElementNotFoundException(array[990], "Element not found");
+    assertThrown!RangeError(array[990], "Element not found");
     assert(!array.has(990), "Element removed");
     assert(array.front.index == 110, "Front unchanged");
     assert(array.front.value == "110", "Front unchanged");
@@ -451,7 +438,7 @@ unittest
 
     // Remove middle
     array.remove(550);
-    assertThrown!ElementNotFoundException(array[550], "Element not found");
+    assertThrown!RangeError(array[550], "Element not found");
     assert(!array.has(550), "Element removed");
     assert(array.front.index == 110, "Front unchanged");
     assert(array.front.value == "110", "Front unchanged");
@@ -543,8 +530,8 @@ unittest
     size_t j = 0;
     foreach(ref str; array[])
     {
-        assert(j == 0, "Called once");
-        assert(str.value == strings[j++]);
+        assert(j++ == 0, "Called once");
+        assert(str.value == strings[j]);
     }
     array.remove(0);
     
@@ -553,6 +540,8 @@ unittest
     {
         array[i] = strings[i];
     }
+
+    assert(array.length == array[].length, "Array and slice length the same");
 
     j = 0;
     foreach(ref str; array[])
