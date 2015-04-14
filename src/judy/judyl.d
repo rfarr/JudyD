@@ -271,6 +271,8 @@ struct JudyLArray(ElementType)
             return JudyLLastEmpty(array_, &index, NO_ERROR) == 1;
         }
 
+
+
         @property size_t memUsed() const
         {
             return JudyLMemUsed(array_);
@@ -396,7 +398,7 @@ struct JudyLArray(ElementType)
 
                 @property auto count() const
                 {
-                    return JudyLCount(array_, firstIndex_, lastIndex_, NO_ERROR);
+                    return JudyLCount(array_, leftBound_, rightBound_, NO_ERROR);
                 }
         }
 }
