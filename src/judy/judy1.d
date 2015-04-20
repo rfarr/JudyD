@@ -1,4 +1,4 @@
-module judy.Judy1;
+module judy.judy1;
 
 import core.exception;
 import std.array;

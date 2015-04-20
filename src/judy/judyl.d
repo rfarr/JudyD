@@ -1,5 +1,6 @@
 module judy.judyl;
 
+import std.stdio;
 import core.exception;
 import std.array;
 import std.range;
@@ -12,27 +13,66 @@ struct JudyLArray(ElementType)
     private:
         void* array_;
 
-        struct JudyLEntry(ElementType)
+        void insert(ElementType)(const size_t index, ref ElementType value)
         {
-            public:
-                const size_t index;
-                const ElementType value;
+            auto element = cast(ElementType**)JudyLIns(&array_, index, NO_ERROR);
+            if (element is null)
+            {
+                throw new RangeError();
+            }
+            *element = &value;
+        }
 
-                this(const size_t index, const ref ElementType value)
+        ref ElementType get(ElementType)(const size_t index) const
+        {
+            auto element = cast(ElementType**)JudyLGet(array_, index, NO_ERROR);
+            if (element is null)
+            {
+                throw new RangeError();
+            }
+            return **element;
+        }
+
+        ref ElementType get(ElementType : Object)(const size_t index) const
+        {
+            auto element = cast(ElementType**)JudyLGet(array_, index, NO_ERROR);
+            if (element is null)
+            {
+                throw new RangeError();
+            }
+            return **element;
+        }
+
+        struct JudyLEntry
+        {
+            private:
+                const size_t index_;
+                ElementType* value_;
+
+            public:
+                this(const size_t index, ref ElementType value)
                 {
-                    this.index = index;
-                    this.value = value;
+                    this.index_ = index;
+                    this.value_ = &value;
                 }
 
-                string toString()
+                @property size_t index()
                 {
-                    return format("%s: (%s) '%s'", index, ElementType.stringof, value);
+                    return index_;
+                }
+
+                @property ref ElementType value()
+                {
+                    return *value_;
                 }
         }
-        alias Entry = JudyLEntry!ElementType;
 
 
     public:
+
+        @disable
+        this(this);
+
         ~this()
         {
             JudyLFreeArray(&array_, NO_ERROR);
@@ -51,14 +91,14 @@ struct JudyLArray(ElementType)
 
 
 
-        @property Entry front() const
+        @property JudyLEntry front() const
         {
             size_t index = 0;
-            ElementType value;
+            auto value = cast(ElementType**)JudyLFirst(array_, &index, NO_ERROR);
 
-            if (first(index, value))
+            if (value !is null)
             {
-                return Entry(index, value);
+                return JudyLEntry(index, **value);
             }
             throw new RangeError();
         }
@@ -78,14 +118,14 @@ struct JudyLArray(ElementType)
 
 
 
-        @property Entry back() const
+        @property JudyLEntry back() const
         {
             size_t index = -1;
-            ElementType value;
+            auto value = cast(ElementType**)JudyLLast(array_, &index, NO_ERROR);
 
-            if (last(index, value))
+            if (value !is null)
             {
-                return Entry(index, value);
+                return JudyLEntry(index, **value);
             }
             throw new RangeError();
         }
@@ -104,14 +144,14 @@ struct JudyLArray(ElementType)
         }
 
 
-        auto opSlice()
+        auto opSlice() inout
         {
-            return JudyLArrayRange!ElementType(array_);
+            return JudyLArrayRange(array_);
         }
 
-        auto opSlice(const size_t start, const size_t end)
+        auto opSlice(const size_t start, const size_t end) inout
         {
-            return JudyLArrayRange!ElementType(array_, start, end);
+            return JudyLArrayRange(array_, start, end);
         }
 
         size_t opDollar() const
@@ -127,30 +167,19 @@ struct JudyLArray(ElementType)
         
         ref ElementType opIndex(const size_t index) const
         {
-            auto element = cast(ElementType**)JudyLGet(array_, index, NO_ERROR);
-            if (element is null)
-            {
-                throw new RangeError();
-            }
-            return **element;
+            return get!ElementType(index);
         }
-
-
 
         void opIndexAssign(ref ElementType value, const size_t index)
         {
-            add(index, value);
+            insert(index, value);
         }
 
         void add(const size_t index, ref ElementType value)
         {
-            auto element = cast(ElementType**)JudyLIns(&array_, index, NO_ERROR);
-            if (element is null)
-            {
-                throw new RangeError();
-            }
-            *element = &value;
+            insert(index, value);
         }
+
 
         bool remove(const size_t index)
         {
@@ -284,9 +313,8 @@ struct JudyLArray(ElementType)
         }
 
 
-
         /* Iteration struct, allows fast read only iteration of the underlying Judy array */
-        struct JudyLArrayRange(ElementType)
+        struct JudyLArrayRange
         {
             private:
                 ElementType* frontPtr_;
@@ -327,13 +355,13 @@ struct JudyLArray(ElementType)
                     return frontPtr_ is null;
                 }
 
-                @property Entry front() const
+                @property JudyLEntry front()
                 {
                     if (frontPtr_ is null)
                     {
                         throw new RangeError();
                     }
-                    return Entry(firstIndex_, *frontPtr_);
+                    return JudyLEntry(firstIndex_, *frontPtr_);
                 }
 
                 void popFront()
@@ -351,13 +379,13 @@ struct JudyLArray(ElementType)
                     }
                 }
 
-                @property Entry back() const
+                @property JudyLEntry back()
                 {
                     if (backPtr_ is null)
                     {
                         throw new RangeError();
                     }
-                    return Entry(lastIndex_, *backPtr_);
+                    return JudyLEntry(lastIndex_, *backPtr_);
                 }
 
                 void popBack()
@@ -391,7 +419,7 @@ struct JudyLArray(ElementType)
                     return **element;
                 }
 
-                @property JudyLArrayRange!ElementType save()
+                @property JudyLArrayRange save()
                 {
                     return this;
                 }
@@ -402,6 +430,7 @@ struct JudyLArray(ElementType)
                 }
         }
 }
+
 
 
 version(unittest)
@@ -629,7 +658,6 @@ unittest
     {
         array[i] = strings[i];
     }
-
     // Verify front and back
     assert(array.front.index == 100, "Correct front");
     assert(array.front.value == "100", "Correct front");
