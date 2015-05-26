@@ -1,46 +1,54 @@
 module judy.judyl;
 
-import std.stdio;
 import core.exception;
+import core.memory;
 import std.array;
 import std.range;
-import std.string;
 
 import judy.external;
 
-struct JudyLArray(ElementType)
+struct JudyLArray(ElementType : Object)
 {
     private:
         void* array_;
 
-        void insert(ElementType)(const size_t index, ref ElementType value)
+        void insert(const size_t index, ElementType value)
         {
             auto element = cast(ElementType**)JudyLIns(&array_, index, NO_ERROR);
             if (element is null)
             {
                 throw new RangeError();
             }
-            *element = &value;
+            GC.addRoot(cast(void*)value);
+            *element = cast(ElementType*)value;
         }
 
-        ref ElementType get(ElementType)(const size_t index) const
+        ElementType get(const size_t index) const
         {
             auto element = cast(ElementType**)JudyLGet(array_, index, NO_ERROR);
             if (element is null)
             {
                 throw new RangeError();
             }
-            return **element;
+            return cast(ElementType)(*element);
         }
 
-        ref ElementType get(ElementType : Object)(const size_t index) const
+        bool remove(const size_t index)
         {
-            auto element = cast(ElementType**)JudyLGet(array_, index, NO_ERROR);
-            if (element is null)
+            ElementType element;
+            if (!at(index, element))
             {
-                throw new RangeError();
+                return false;
             }
-            return **element;
+
+            auto deleted = JudyLDel(&array_, index, NO_ERROR) == 1;
+
+            if (deleted)
+            {
+                GC.removeRoot(cast(void*)element);
+            }
+
+            return deleted;
         }
 
         struct JudyLEntry
@@ -50,10 +58,10 @@ struct JudyLArray(ElementType)
                 ElementType* value_;
 
             public:
-                this(const size_t index, ref ElementType value)
+                this(const size_t index, ElementType* value)
                 {
                     this.index_ = index;
-                    this.value_ = &value;
+                    this.value_ = value;
                 }
 
                 @property size_t index()
@@ -61,9 +69,9 @@ struct JudyLArray(ElementType)
                     return index_;
                 }
 
-                @property ref ElementType value()
+                @property ElementType value()
                 {
-                    return *value_;
+                    return cast(ElementType)(value_);
                 }
         }
 
@@ -98,7 +106,7 @@ struct JudyLArray(ElementType)
 
             if (value !is null)
             {
-                return JudyLEntry(index, **value);
+                return JudyLEntry(index, *value);
             }
             throw new RangeError();
         }
@@ -116,8 +124,6 @@ struct JudyLArray(ElementType)
             }
         }
 
-
-
         @property JudyLEntry back() const
         {
             size_t index = -1;
@@ -125,7 +131,7 @@ struct JudyLArray(ElementType)
 
             if (value !is null)
             {
-                return JudyLEntry(index, **value);
+                return JudyLEntry(index, *value);
             }
             throw new RangeError();
         }
@@ -165,26 +171,21 @@ struct JudyLArray(ElementType)
         
         
         
-        ref ElementType opIndex(const size_t index) const
+        ElementType opIndex(const size_t index) const
         {
-            return get!ElementType(index);
+            return get(index);
         }
 
-        void opIndexAssign(ref ElementType value, const size_t index)
-        {
-            insert(index, value);
-        }
-
-        void add(const size_t index, ref ElementType value)
+        void opIndexAssign(ElementType value, const size_t index)
         {
             insert(index, value);
         }
 
-
-        bool remove(const size_t index)
+        void add(const size_t index, ElementType value)
         {
-            return JudyLDel(&array_, index, NO_ERROR) == 1;
+            insert(index, value);
         }
+
 
         bool at(const size_t index, out ElementType value) const
         {
@@ -193,7 +194,7 @@ struct JudyLArray(ElementType)
             {
                 return false;
             }
-            value = **element;
+            value = cast(ElementType)(*element);
             return true;
         }
 
@@ -211,7 +212,7 @@ struct JudyLArray(ElementType)
             {
                 return false;
             }
-            found = **value;
+            found = cast(ElementType)(*value);
             return true;
         }
 
@@ -232,7 +233,7 @@ struct JudyLArray(ElementType)
             {
                 return false;
             }
-            found = **value;
+            found = cast(ElementType)(*value);
             return true;
         }
 
@@ -248,7 +249,7 @@ struct JudyLArray(ElementType)
             {
                 return false;
             }
-            found = **value;
+            found = cast(ElementType)(*value);
             return true;
         }
 
@@ -264,7 +265,7 @@ struct JudyLArray(ElementType)
             {
                 return false;
             }
-            found = **value;
+            found = cast(ElementType)(*value);
             return true;
         }
 
@@ -361,7 +362,7 @@ struct JudyLArray(ElementType)
                     {
                         throw new RangeError();
                     }
-                    return JudyLEntry(firstIndex_, *frontPtr_);
+                    return JudyLEntry(firstIndex_, frontPtr_);
                 }
 
                 void popFront()
@@ -385,7 +386,7 @@ struct JudyLArray(ElementType)
                     {
                         throw new RangeError();
                     }
-                    return JudyLEntry(lastIndex_, *backPtr_);
+                    return JudyLEntry(lastIndex_, backPtr_);
                 }
 
                 void popBack()
@@ -402,7 +403,7 @@ struct JudyLArray(ElementType)
                     }
                 }
 
-                ref ElementType opIndex(size_t index) const
+                ElementType opIndex(size_t index) const
                 {
                     if (index < leftBound_ || index > rightBound_)
                     {
@@ -416,7 +417,7 @@ struct JudyLArray(ElementType)
                         throw new RangeError();
                     }
 
-                    return **element;
+                    return cast(ElementType)(*element);
                 }
 
                 @property JudyLArrayRange save()
@@ -438,22 +439,39 @@ version(unittest)
     import std.conv;
     import std.exception;
     import std.stdio;
+
+    class Data
+    {
+      public:
+        this(int x)
+        {
+            this.x = x;
+        }
+
+        int x;
+
+        override string toString()
+        {
+          return to!string(x);
+        }
+    }
 }
+
 
 unittest
 {
     writeln("[JudyL UnitTest] - count");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    string hello = "hello";
+    auto data = new Data(0);
 
     assert(array.count == 0, "Array starting count is 0");
 
-    array[0] = hello;
+    array[0] = data;
     assert(array.count == 1, "Array count updated");
 
-    array[1] = hello;
+    array[1] = data;
     assert(array.count == 2, "Array count updated");
 
     array.remove(0);
@@ -467,16 +485,16 @@ unittest
 {
     writeln("[JudyL UnitTest] - empty");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    string hello = "hello";
+    auto data = new Data(0);
 
     assert(array.empty, "Array starts empty");
 
-    array[0] = hello;
+    array[0] = data;
     assert(!array.empty, "Array not empty");
 
-    array.add(1, hello);
+    array.add(1, data);
     assert(!array.empty, "Array not empty");
 
     array.remove(0);
@@ -488,19 +506,19 @@ unittest
 {
     writeln("[JudyL UnitTest] - has");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    string hello = "hello";
+    auto data = new Data(0);
 
     assert(!array.has(0), "Array doesn't have element");
     assert(!array.has(1), "Array doesn't have element");
 
-    array[0] = hello;
+    array[0] = data;
 
     assert(array.has(0), "Array has element");
     assert(!array.has(1), "Array doesn't have element");
 
-    array[1] = hello;
+    array[1] = data;
 
     assert(array.has(0), "Array has element");
     assert(array.has(1), "Array has element");
@@ -510,92 +528,97 @@ unittest
 {
     writeln("[JudyL UnitTest] - at");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    string hello = "hello";
-    string world = "world";
+    auto data0 = new Data(0);
+    auto data1 = new Data(1);
 
-    string value;
+    Data value;
 
     assert(!array.at(0, value), "Array doesn't have element");
     assert(!array.at(1, value), "Array doesn't have element");
 
-    array[0] = hello;
-    assert(array.at(0, value), "Array has element");
-    assert(value == hello);
+    array[0] = data0;
+    array[1] = data1;
 
-    array[1] = world;
+    assert(array.at(0, value), "Array has element");
+    assert(value == data0);
+
     assert(array.at(1, value), "Array has element");
-    assert(value == world);
+    assert(value == data1);
 }
 
 unittest
 {
     writeln("[JudyL UnitTest] - add");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    string hello = "hello";
-    string world = "world";
+    auto data0 = new Data(0);
+    auto data1 = new Data(1);
 
-    array.add(0, hello);
-    assert(array[0] == hello, "Array has element");
+    array.add(0, data0);
+    array.add(1, data1);
 
-    array.add(1,  world);
-    assert(array[1] == world, "Array has element");
+    assert(array[0] == data0, "Array has element");
+    assert(array[1] == data1, "Array has element");
 
-    array.add(0,  world);
-    assert(array[0] == world, "Element updated");
+    array.add(0,  data1);
+    assert(array[0] == data1, "Element updated");
 }
 
 unittest
 {
     writeln("[JudyL UnitTest] - opIndexAssign");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    string hello = "hello";
-    string world = "world";
+    auto data0 = new Data(0);
+    auto data1 = new Data(1);
 
-    array[0] = hello;
-    assert(array[0] == hello, "Array has element");
+    array.add(0, data0);
+    array.add(1, data1);
 
-    array[1] = world;
-    assert(array[1] == world, "Array has element");
+    array[0] = data0;
+    assert(array[0] == data0, "Array has element");
 
-    array[0] = world;
-    assert(array[0] == world, "Element updated");
+    array[1] = data1;
+    assert(array[1] == data1, "Array has element");
+
+    array[0] = data1;
+    assert(array[0] == data1, "Element updated");
 }
 
 unittest
 {
     writeln("[JudyL UnitTest] - opIndex");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    string hello = "hello";
-    string world = "world";
+    auto data0 = new Data(0);
+    auto data1 = new Data(1);
 
     assertThrown!RangeError(array[0], "Array doesn't have element");
     assertThrown!RangeError(array[1], "Array doesn't have element");
 
-    array[0] = hello;
-    assert(array[0] == hello, "Array has element");
+    array[0] = data0;
+    assert(array[0] == data0, "Array has element");
 
-    array[1] = world;
-    assert(array[1] == world, "Array has element");
+    array[1] = data1;
+    assert(array[1] == data1, "Array has element");
 }
 
 unittest
 {
     writeln("[JudyL UnitTest] - remove");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
+
+    auto data = new Data(0);
 
     assert(!array.remove(0), "Array doesn't have element");
 
-    string hello = "hello";
-    array[0] = hello;
+    array[0] = data;
     assert(array.remove(0), "Array had element");
 
     assert(!array.has(0), "Element removed");
@@ -605,19 +628,18 @@ unittest
 {
     writeln("[JudyL UnitTest] - forward iteration");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
     auto testrange = iota(100, 1000, 10);
 
-    // Alocate storage for the string values on the stack
-    string[int] strings = assocArray(
+    Data[int] datas = assocArray(
         zip(
             testrange,
-            map!(a => to!string(a))(testrange).array
+            map!(a => new Data(a))(testrange).array
         )
     );
 
-    foreach(str; array)
+    foreach(data; array)
     {
         assert(false, "Empty array");
     }
@@ -625,14 +647,14 @@ unittest
     // Insert some elements
     foreach(i; testrange)
     {
-        array[i] = strings[i];
+        array[i] = datas[i];
     }
 
     auto j = 0;
-    foreach(ref str; array)
+    foreach(ref data; array)
     {
-        assert(str.index == testrange[j]);
-        assert(str.value == array[testrange[j++]]);
+        assert(data.index == testrange[j]);
+        assert(data.value == array[testrange[j++]]);
     }
     assert(array.count == testrange.length, "Forward iteration leaves data intact");
 }
@@ -641,72 +663,71 @@ unittest
 {
     writeln("[JudyL UnitTest] - front and back");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
     auto testrange = iota(100, 1000, 10);
 
-    // Alocate storage for the string values on the stack
-    string[int] strings = assocArray(
+    Data[int] datas = assocArray(
         zip(
             testrange,
-            map!(a => to!string(a))(testrange).array
+            map!(a => new Data(a))(testrange).array
         )
     );
 
     // Insert some elements
     foreach(i; testrange)
     {
-        array[i] = strings[i];
+        array[i] = datas[i];
     }
+
     // Verify front and back
     assert(array.front.index == 100, "Correct front");
-    assert(array.front.value == "100", "Correct front");
+    assert(array.front.value == datas[100], "Correct front");
     assert(array.back.index == 990, "Correct back");
-    assert(array.back.value == "990", "Correct back");
+    assert(array.back.value == datas[990], "Correct back");
 
 
     // Remove front
     array.remove(100);
     assert(array.front.index == 110, "Front updated");
-    assert(array.front.value == "110", "Front updated");
+    assert(array.front.value == datas[110], "Front updated");
     assert(array.back.index == 990, "Back unchanged");
-    assert(array.back.value == "990", "Back unchanged");
+    assert(array.back.value == datas[990], "Back unchanged");
 
     // Remove back
     array.remove(990);
     assert(array.front.index == 110, "Front unchanged");
-    assert(array.front.value == "110", "Front unchanged");
+    assert(array.front.value == datas[110], "Front unchanged");
     assert(array.back.index == 980, "Back updated");
-    assert(array.back.value == "980", "Back updated");
+    assert(array.back.value == datas[980], "Back updated");
 
     // Remove middle
     array.remove(550);
     assert(array.front.index == 110, "Front unchanged");
-    assert(array.front.value == "110", "Front unchanged");
+    assert(array.front.value == datas[110], "Front unchanged");
     assert(array.back.index == 980, "Back updated");
-    assert(array.back.value == "980", "Back updated");
+    assert(array.back.value == datas[980], "Back updated");
 }
 
 unittest
 {
     writeln("[JudyL UnitTest] - popFront and popBack");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
     auto testrange = iota(0, 10);
 
-    // Alocate storage for the string values on the stack
-    string[int] strings = assocArray(
+    Data[int] datas = assocArray(
         zip(
             testrange,
-            map!(a => to!string(a))(testrange).array
+            map!(a => new Data(a))(testrange).array
         )
     );
 
     // Insert some elements
     foreach(i; testrange)
     {
-        array[i] = strings[i];
+        array[i] = datas[i];
     }
 
     auto first = array.first();
@@ -734,28 +755,27 @@ unittest
 {
     writeln("[JudyL UnitTest] - free memory");
 
-    JudyLArray!string* ptr;
+    JudyLArray!Data* ptr;
 
     {
-        auto array = JudyLArray!string();
+        auto array = JudyLArray!Data();
 
         assert(array.memUsed == 0, "No memory used on empty array");
         assert(array.memActive == 0, "No memory active on empty array");
 
         auto testrange = iota(0, 100);
 
-        // Alocate storage for the string values on the stack
-        string[int] strings = assocArray(
+        Data[int] datas = assocArray(
             zip(
                 testrange,
-                map!(a => to!string(a))(testrange).array
+                map!(a => new Data(a))(testrange).array
             )
         );
 
         // Insert some elements
         foreach(i; testrange)
         {
-            array[i] = strings[i];
+            array[i] = datas[i];
         }
 
         assert(array.count == 100, "Count updated");
@@ -775,56 +795,55 @@ unittest
 {
     writeln("[JudyL UnitTest] - opSlice");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    auto testrange = iota(0UL, 100UL);
+    auto testrange = iota(0, 100);
 
-    // Alocate storage for the string values on the stack
-    string[size_t] strings = assocArray(
+    Data[int] datas = assocArray(
         zip(
             testrange,
-            map!(a => to!string(a))(testrange).array
+            map!(a => new Data(a))(testrange).array
         )
     );
 
     // Test empty
-    foreach(str; array[])
+    foreach(data; array[])
     {
         assert(false, "empty array");
     }
 
     // Test one element
-    array[1000] = strings[0];
-    size_t j = 0;
-    foreach(ref str; array[])
+    array[1000] = datas[0];
+    int j = 0;
+    foreach(ref data; array[])
     {
         assert(j++ == 0, "Called once");
-        assert(str.index == 1000, "Index preserved");
-        assert(str.value == strings[0]);
+        assert(data.index == 1000, "Index preserved");
+        assert(data.value == datas[0]);
     }
     array.remove(1000);
     
     // Insert some elements
     foreach(i; testrange)
     {
-        array[i] = strings[i];
+        array[i] = datas[i];
     }
 
     assert(array.count == array[].count, "Array and slice count the same");
 
     j = 0;
-    foreach(ref str; array[])
+    foreach(ref data; array[])
     {
-        assert(str.index == testrange[j]);
-        assert(str.value == strings[j++], "Forward range iteration");
+        assert(data.index == testrange[j]);
+        assert(data.value == datas[j++], "Forward range iteration");
     }
 
     // backwards iteration
     j = testrange[$-1];
-    foreach(ref str; retro(array[]))
+    foreach(ref data; retro(array[]))
     {
-        assert(str.index == testrange[j]);
-        assert(str.value == strings[j--], "Retrograde range iteration");
+        assert(data.index == testrange[j]);
+        assert(data.value == datas[j--], "Retrograde range iteration");
     }
 
     auto slice = array[];
@@ -835,81 +854,80 @@ unittest
 
     assertThrown!RangeError(slice[200], "Out of bounds");
 
-    string hello = "hello";
-    string world = "world";
+    auto data1 = new Data(-7);
+    auto data2 = new Data(-10);
 
-    array[50] = hello;
-    array[10000] = world;
+    array[50] = data1;
+    array[10000] = data2;
 
-    assert(slice[50] == hello, "Array mutation reflected in slice");
-    assert(slice[10000] == world, "Array insertion reflected in slice");
+    assert(slice[50] == data1, "Array mutation reflected in slice");
+    assert(slice[10000] == data2, "Array insertion reflected in slice");
 }
 
 unittest
 {
     writeln("[JudyL UnitTest] - opSlice[x..y]");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    auto testrange = iota(0, 100UL);
+    auto testrange = iota(0, 100);
 
-    // Alocate storage for the string values on the stack
-    string[size_t] strings = assocArray(
+    Data[int] datas = assocArray(
         zip(
             testrange,
-            map!(a => to!string(a))(testrange).array
+            map!(a => new Data(a))(testrange).array
         )
     );
 
     // Test empty
-    foreach(str; array[1..2])
+    foreach(data; array[1..2])
     {
         assert(false, "empty array");
     }
 
     // Test one element
-    array[2] = strings[0];
-    size_t j = 0;
-    foreach(ref str; array[0..5])
+    array[2] = datas[0];
+    int j = 0;
+    foreach(ref data; array[0..5])
     {
         assert(j == 0, "Called once");
-        assert(str.index == 2);
-        assert(str.value == strings[0]);
+        assert(data.index == 2);
+        assert(data.value == datas[0]);
     }
     array.remove(2);
     
     // Insert some elements
     foreach(i; testrange)
     {
-        array[i] = strings[i];
+        array[i] = datas[i];
     }
 
     j = 20;
-    foreach(ref str; array[20..30])
+    foreach(ref data; array[20..30])
     {
-        assert(str.index == j);
-        assert(str.value == strings[j++], "Indexed slice");
+        assert(data.index == j);
+        assert(data.value == datas[j++], "Indexed slice");
     }
 
     j = 20;
-    foreach(ref str; array[20..500])
+    foreach(ref data; array[20..500])
     {
-        assert(str.index == j);
-        assert(str.value == strings[j++], "Indexed slice beyond population");
+        assert(data.index == j);
+        assert(data.value == datas[j++], "Indexed slice beyond population");
     }
 
     j = 90;
-    foreach(ref str; array[90..$])
+    foreach(ref data; array[90..$])
     {
-        assert(str.index == j);
-        assert(str.value == strings[j++], "OpDollar slice");
+        assert(data.index == j);
+        assert(data.value == datas[j++], "OpDollar slice");
     }
 
     j = 20;
-    foreach(ref str; retro(array[10..20]))
+    foreach(ref data; retro(array[10..20]))
     {
-        assert(str.index == j);
-        assert(str.value == strings[j--], "Retrograde slice");
+        assert(data.index == j);
+        assert(data.value == datas[j--], "Retrograde slice");
     }
 
     auto slice = array[50..$];
@@ -921,28 +939,26 @@ unittest
     assertThrown!RangeError(array[10..20][9], "Out of bounds");
     assertThrown!RangeError(array[10..20][21], "Out of bounds");
 
-    string hello = "hello";
-    string world = "world";
+    auto data1 = new Data(-3);
+    auto data2 = new Data(-4);
 
-    array[67] = hello;
-    array[200] = world;
+    array[67] = data1;
 
-    assert(slice[67] == hello, "Array mutation reflected in slice");
+    assert(slice[67] == data1, "Array mutation reflected in slice");
 }
 
 unittest
 {
     writeln("[JudyL UnitTest] - opDollar");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    auto testrange = iota(0, 100UL, 5);
+    auto testrange = iota(0, 100, 5);
 
-    // Alocate storage for the string values on the stack
-    string[size_t] strings = assocArray(
+    Data[int] datas = assocArray(
         zip(
             testrange,
-            map!(a => to!string(a))(testrange).array
+            map!(a => new Data(a))(testrange).array
         )
     );
 
@@ -950,29 +966,29 @@ unittest
     assertThrown!RangeError(array[$]);
 
     // Test one element
-    array[0] = strings[0];
-    array[$] = strings[5];
-    assert(array[0] == strings[5]);
+    array[0] = datas[0];
+    array[$] = datas[5];
+    assert(array[0] == datas[5]);
     array.remove(0);
 
     
     // Insert some elements
     foreach(i; testrange)
     {
-        array[i] = strings[i];
+        array[i] = datas[i];
     }
 
-    array[$] = strings[0];
+    array[$] = datas[0];
 
-    assert(array[95] == strings[0], "opDollar is last index");
+    assert(array[95] == datas[0], "opDollar is last index");
 
-    string hello = "hello";
-    array[size_t.max] = hello;
+    auto data1 = new Data(77);
+    array[size_t.max] = data1;
 
     auto slice = array[95..$];
     assert(slice.count == 2);
-    assert(slice[95] == strings[0]);
-    assert(slice[size_t.max] == hello);
+    assert(slice[95] == datas[0]);
+    assert(slice[size_t.max] == data1);
 }
 
 
@@ -980,9 +996,9 @@ unittest
 {
     writeln("[JudyL UnitTest] - find in empty array");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    string found;
+    Data found;
     size_t index = 0;
     assert(!array.first(index, found), "Empty array");
     assert(!array.first(index), "Empty array");
@@ -1006,19 +1022,19 @@ unittest
 {
     writeln("[JudyL UnitTest] - find with single element at start");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    string hello = "hello";
-    array[0] = hello;
+    auto data = new Data(1);
+    array[0] = data;
 
-    string found;
+    Data found;
 
 
 
     size_t index = 0;
     assert(array.first(index, found));
     assert(index == 0);
-    assert(found == hello);
+    assert(found == data);
 
     index = 0;
     assert(array.first(index));
@@ -1040,7 +1056,7 @@ unittest
     index = 0;
     assert(array.last(index, found));
     assert(index == 0);
-    assert(found == hello);
+    assert(found == data);
 
     index = 0;
     assert(array.last(index));
@@ -1060,7 +1076,7 @@ unittest
     index = 1;
     assert(array.prev(index, found));
     assert(index == 0);
-    assert(found == hello);
+    assert(found == data);
 
     index = 1;
     assert(array.prev(index));
@@ -1069,7 +1085,7 @@ unittest
     index = 1;
     assert(array.last(index, found));
     assert(index == 0);
-    assert(found == hello);
+    assert(found == data);
 
     index = 1;
     assert(array.last(index));
@@ -1092,7 +1108,7 @@ unittest
     index = -1;
     assert(array.prev(index, found));
     assert(index == 0);
-    assert(found == hello);
+    assert(found == data);
 
     index = -1;
     assert(array.prev(index));
@@ -1101,7 +1117,7 @@ unittest
     index = -1;
     assert(array.last(index, found));
     assert(index == 0);
-    assert(found == hello);
+    assert(found == data);
 
     index = -1;
     assert(array.last(index));
@@ -1113,21 +1129,21 @@ unittest
 {
     writeln("[JudyL UnitTest] - find with single element at end");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
     const auto END = size_t.max;
 
-    string hello = "hello";
-    array[END] = hello;
+    auto data = new Data(0);
+    array[END] = data;
 
-    string found;
+    Data found;
 
 
 
     size_t index = 0;
     assert(array.first(index, found));
     assert(index == END);
-    assert(found == hello);
+    assert(found == data);
 
     index = 0;
     assert(array.first(index));
@@ -1137,7 +1153,7 @@ unittest
     index = 0;
     assert(array.next(index, found));
     assert(index == END);
-    assert(found == hello);
+    assert(found == data);
 
     index = 0;
     assert(array.next(index));
@@ -1159,7 +1175,7 @@ unittest
     index = END - 1;
     assert(array.first(index, found));
     assert(index == END);
-    assert(found == hello);
+    assert(found == data);
 
     index = END - 1;
     assert(array.first(index));
@@ -1168,7 +1184,7 @@ unittest
     index = END - 1;
     assert(array.next(index, found));
     assert(index == END);
-    assert(found == hello);
+    assert(found == data);
 
     index = END - 1;
     assert(array.next(index));
@@ -1187,7 +1203,7 @@ unittest
     index = -1;
     assert(array.first(index, found));
     assert(index == END);
-    assert(found == hello);
+    assert(found == data);
 
     index = -1;
     assert(array.first(index));
@@ -1208,7 +1224,7 @@ unittest
     index = -1;
     assert(array.last(index, found));
     assert(index == END);
-    assert(found == hello);
+    assert(found == data);
 
     index = -1;
     assert(array.last(index));
@@ -1219,19 +1235,19 @@ unittest
 {
     writeln("[JudyL UnitTest] - find with single element in middle");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    string hello = "hello";
-    array[10] = hello;
+    auto data = new Data(0);
+    array[10] = data;
 
-    string found;
+    Data found;
 
 
     
     size_t index = 0;
     assert(array.first(index, found));
     assert(index == 10);
-    assert(found == hello);
+    assert(found == data);
 
     index = 0;
     assert(array.first(index));
@@ -1241,7 +1257,7 @@ unittest
     index = 0;
     assert(array.next(index, found));
     assert(index == 10);
-    assert(found == hello);
+    assert(found == data);
 
     index = 0;
     assert(array.next(index));
@@ -1265,7 +1281,7 @@ unittest
     index = 10;
     assert(array.first(index, found));
     assert(index == 10);
-    assert(found == hello);
+    assert(found == data);
 
     index = 10;
     assert(array.first(index));
@@ -1282,7 +1298,7 @@ unittest
     index = 10;
     assert(array.last(index, found));
     assert(index == 10);
-    assert(found == hello);
+    assert(found == data);
 
     index = 10;
     assert(array.last(index));
@@ -1301,7 +1317,7 @@ unittest
     index = 11;
     assert(array.prev(index, found));
     assert(index == 10);
-    assert(found == hello);
+    assert(found == data);
 
     index = 11;
     assert(array.prev(index));
@@ -1310,7 +1326,7 @@ unittest
     index = 11;
     assert(array.last(index, found));
     assert(index == 10);
-    assert(found == hello);
+    assert(found == data);
 
     index = 11;
     assert(array.last(index));
@@ -1321,7 +1337,7 @@ unittest
     index = -1;
     assert(array.prev(index, found));
     assert(index == 10);
-    assert(found == hello);
+    assert(found == data);
 
     index = -1;
     assert(array.prev(index));
@@ -1330,7 +1346,7 @@ unittest
     index = -1;
     assert(array.last(index, found));
     assert(index == 10);
-    assert(found == hello);
+    assert(found == data);
 
     index = -1;
     assert(array.last(index));
@@ -1341,22 +1357,22 @@ unittest
 {
     writeln("[JudyL UnitTest] - find with multiple elements");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
-    string hello = "hello";
-    string world = "world";
+    auto data1 = new Data(0);
+    auto data2 = new Data(1);
 
-    array[0] = hello;
-    array[10] = world;
+    array[0] = data1;
+    array[10] = data2;
 
-    string found;
+    Data found;
 
 
     
     size_t index = 0;
     assert(array.first(index, found));
     assert(index == 0);
-    assert(found == hello);
+    assert(found == data1);
 
     index = 0;
     assert(array.first(index));
@@ -1366,7 +1382,7 @@ unittest
     index = 0;
     assert(array.next(index, found));
     assert(index == 10);
-    assert(found == world);
+    assert(found == data2);
 
     index = 0;
     assert(array.next(index));
@@ -1381,7 +1397,7 @@ unittest
     index = 0;
     assert(array.last(index, found));
     assert(index == 0);
-    assert(found == hello);
+    assert(found == data1);
 
     index = 0;
     assert(array.last(index));
@@ -1393,7 +1409,7 @@ unittest
     index = 1;
     assert(array.first(index, found));
     assert(index == 10);
-    assert(found == world);
+    assert(found == data2);
 
     index = 1;
     assert(array.first(index));
@@ -1402,7 +1418,7 @@ unittest
     index = 1;
     assert(array.next(index, found));
     assert(index == 10);
-    assert(found == world);
+    assert(found == data2);
 
     index = 1;
     assert(array.next(index));
@@ -1411,7 +1427,7 @@ unittest
     index = 1;
     assert(array.prev(index, found));
     assert(index == 0);
-    assert(found == hello);
+    assert(found == data1);
 
     index = 1;
     assert(array.prev(index));
@@ -1420,7 +1436,7 @@ unittest
     index = 1;
     assert(array.last(index, found));
     assert(index == 0);
-    assert(found == hello);
+    assert(found == data1);
 
     index = 1;
     assert(array.last(index));
@@ -1431,7 +1447,7 @@ unittest
     index = 10;
     assert(array.first(index, found));
     assert(index == 10);
-    assert(found == world);
+    assert(found == data2);
 
     index = 10;
     assert(array.first(index));
@@ -1444,7 +1460,7 @@ unittest
     index = 10;
     assert(array.prev(index, found));
     assert(index == 0);
-    assert(found == hello);
+    assert(found == data1);
 
     index = 10;
     assert(array.prev(index));
@@ -1453,7 +1469,7 @@ unittest
     index = 10;
     assert(array.last(index, found));
     assert(index == 10);
-    assert(found == world);
+    assert(found == data2);
 
     index = 10;
     assert(array.last(index));
@@ -1464,7 +1480,7 @@ unittest
 {
     writeln("[JudyL UnitTest] - find empty in empty array");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
     const auto END = size_t.max;
 
@@ -1489,12 +1505,12 @@ unittest
 {
     writeln("[JudyL UnitTest] - find empty with single element at start");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
     const auto END = size_t.max;
 
-    string hello = "hello";
-    array[0] = hello;
+    auto data = new Data(0);
+    array[0] = data;
 
     size_t index = 0;
     assert(array.firstEmpty(index), "Find first empty");
@@ -1517,12 +1533,12 @@ unittest
 {
     writeln("[JudyL UnitTest] - find empty with single element at end");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
     const auto END = size_t.max;
 
-    string hello = "hello";
-    array[END] = hello;
+    auto data = new Data(0);
+    array[END] = data;
 
     size_t index = END;
     assert(!array.firstEmpty(index), "Find first empty");
@@ -1543,12 +1559,12 @@ unittest
 {
     writeln("[JudyL UnitTest] - find empty with single element in middle");
 
-    auto array = JudyLArray!string();
+    auto array = JudyLArray!Data();
 
     const auto END = size_t.max;
 
-    string hello = "hello";
-    array[10] = hello;
+    auto data = new Data(0);
+    array[10] = data;
 
     size_t index = 0;
     assert(array.firstEmpty(index), "Find first empty");
@@ -1602,4 +1618,3 @@ unittest
     assert(array.lastEmpty(index), "Find last empty");
     assert(index == 9);
 }
-
