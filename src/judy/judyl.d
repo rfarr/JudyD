@@ -83,6 +83,10 @@ struct JudyLArray(ElementType : Object)
 
         ~this()
         {
+            foreach(ref entry; this)
+            {
+                GC.removeRoot(cast(void*)entry.value);
+            }
             JudyLFreeArray(&array_, NO_ERROR);
         }
 
