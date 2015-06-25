@@ -4,32 +4,36 @@ import core.exception;
 import std.array;
 import std.range;
 
-import judy.external;
+import judy.libjudy;
 
+/*
+   Provides D like wrapper around the libjudy C library
+*/
 struct Judy1Array
 {
     private:
         void* array_;
 
     public:
-        ~this()
+        // Free the array
+        ~this() nothrow @nogc
         {
             Judy1FreeArray(&array_, NO_ERROR);
         }
 
-        @property bool empty() const
+        @property bool empty() const nothrow @nogc
         {
             return count == 0;
         }
 
-        /* Returns number of set bit in the Judy array */
-        @property size_t count() const
+        // Returns number of set bit in the Judy array
+        @property size_t count() const nothrow @nogc
         {
             return Judy1Count(array_, 0, -1, NO_ERROR);
         }
 
 
-
+        // Get lowest index of set bit
         @property size_t front() const
         {
             size_t index = 0;
@@ -40,6 +44,7 @@ struct Judy1Array
             throw new RangeError();
         }
 
+        // Unset lowest set bit
         void popFront()
         {
             size_t index = 0;
@@ -54,7 +59,7 @@ struct Judy1Array
         }
 
 
-
+        // Get highest index of set bit
         @property size_t back() const
         {
             size_t index = -1;
@@ -65,6 +70,7 @@ struct Judy1Array
             throw new RangeError();
         }
 
+        // Unset highest set bit
         void popBack()
         {
             size_t index = -1;
@@ -79,17 +85,19 @@ struct Judy1Array
         }
 
 
-
-        auto opSlice() const
+        // Create a (const) slice of the array
+        auto opSlice() const nothrow @nogc
         {
             return Judy1ArrayRange(array_);
         }
 
-        auto opSlice(const size_t start, const size_t end) const
+        // Create a (const) slice of the array from start to end
+        auto opSlice(const size_t start, const size_t end) const nothrow @nogc
         {
             return Judy1ArrayRange(array_, start, end);
         }
 
+        // Returns highest set index
         size_t opDollar() const
         {
             if (empty)
@@ -100,15 +108,15 @@ struct Judy1Array
         }
 
 
-
-        bool opIndex(const size_t index) const
+        // Check if bit set at index
+        bool opIndex(const size_t index) const nothrow @nogc
         {
             return Judy1Test(array_, index, NO_ERROR) == 1;
         }
 
 
-
-        void opIndexAssign(bool value, const size_t index)
+        // Set bit at index to value
+        void opIndexAssign(bool value, const size_t index) nothrow @nogc
         {
             if (value)
             {
@@ -120,84 +128,95 @@ struct Judy1Array
             }
         }
 
-        bool set(const size_t index)
+        // Set bit at index
+        bool set(const size_t index) nothrow @nogc
         {
             return Judy1Set(&array_, index, NO_ERROR) == 1;
         }
 
-        bool unset(const size_t index)
+        // Unset bit at index
+        bool unset(const size_t index) nothrow @nogc
         {
             return Judy1Unset(&array_, index, NO_ERROR) == 1;
         }
 
 
         
-        /* Search functions */
-        bool first(ref size_t index) const
+        // Find first set bit and place it in index. Return false if not found
+        bool first(ref size_t index) const nothrow @nogc
         {
             return Judy1First(array_, &index, NO_ERROR) == 1;
         }
 
+        // Find index of first, throws RangeError if empty
         size_t first() const
         {
             return front;
         }
 
-        bool next(ref size_t index) const
+        // Find next set bit from index, and place it in index. Return false if not found
+        bool next(ref size_t index) const nothrow @nogc
         {
             return Judy1Next(array_, &index, NO_ERROR) == 1;
         }
 
-        bool prev(ref size_t index) const
+        // Find prev set bit from index, and place it in index. Return false if not found
+        bool prev(ref size_t index) const nothrow @nogc
         {
             return Judy1Prev(array_, &index, NO_ERROR) == 1;
         }
 
-        bool last(ref size_t index) const
+        // Find last set bit and place it in index. Return false if not found
+        bool last(ref size_t index) const nothrow @nogc
         {
             return Judy1Last(array_, &index, NO_ERROR) == 1;
         }
 
+        // Get index of last, throws RangeError if empty
         size_t last() const
         {
             return back;
         }
 
 
-        /* Search functions for finding empty */
-        bool firstEmpty(ref size_t index) const
+        // Find first unset bit and place into index. Return false if not found
+        bool firstEmpty(ref size_t index) const nothrow @nogc
         {
             return Judy1FirstEmpty(array_, &index, NO_ERROR) == 1;
         }
 
-        bool nextEmpty(ref size_t index) const
+        // Find next unset bit from index and place into index. Return false if not found;
+        bool nextEmpty(ref size_t index) const nothrow @nogc
         {
             return Judy1NextEmpty(array_, &index, NO_ERROR) == 1;
         }
 
-        bool prevEmpty(ref size_t index) const
+        // Find prev unset bit from index and place into index. Return false if not found;
+        bool prevEmpty(ref size_t index) const nothrow @nogc
         {
             return Judy1PrevEmpty(array_, &index, NO_ERROR) == 1;
         }
 
-        bool lastEmpty(ref size_t index) const
+        // Find last unset bit and place into index. Return false if not found
+        bool lastEmpty(ref size_t index) const nothrow @nogc
         {
             return Judy1LastEmpty(array_, &index, NO_ERROR) == 1;
         }
 
 
-
-        @property size_t memUsed() const
+        // Return total amount of memory used by the population and infrastructure
+        @property size_t memUsed() const nothrow @nogc
         {
             return Judy1MemUsed(array_);
         }
 
-        @property size_t memActive() const
+        // Return total amount of memory used by the population
+        @property size_t memActive() const nothrow @nogc
         {
             return Judy1MemActive(array_);
         }
 
-        /* Iteration struct, allows fast read only iteration of the underlying Judy array */
+        // Iteration struct, allows fast read only iteration of the underlying Judy array
         struct Judy1ArrayRange
         {
             private:
@@ -208,17 +227,22 @@ struct Judy1Array
                 const void* array_;
 
             public:
-                this(const ref void* array)
+                // Construct with no bounds specified
+                this(const ref void* array) nothrow @nogc
                 {
                     this(array, 0UL, -1UL);
                 }
 
-                this(const ref void* array, const size_t firstIndex, const size_t lastIndex)
+                // Construct with specified bounds
+                this(const ref void* array, const size_t firstIndex, const size_t lastIndex) nothrow @nogc
                 {
                     array_ = array;
                     leftBound_ = firstIndex_ = firstIndex;
                     rightBound_ = lastIndex_ = lastIndex;
 
+                    // Sets first and last to the indices of the actual first and
+                    // last within the bound. If the bound is empty sets first and
+                    // last index to the 'empty' values (first > last)
                     if (
                         Judy1First(array_, &firstIndex_, NO_ERROR) != 1 ||
                         Judy1Last(array_, &lastIndex_, NO_ERROR) != 1
@@ -230,11 +254,13 @@ struct Judy1Array
 
                 }
 
-                @property bool empty() const
+                // Is the slice empty of set bits?
+                @property bool empty() const nothrow @nogc
                 {
                     return firstIndex_ > lastIndex_;
                 }
 
+                // Get index of first set bit in slice
                 @property size_t front()
                 {
                     if (empty)
@@ -244,12 +270,10 @@ struct Judy1Array
                     return firstIndex_;
                 }
 
-                void popFront()
+                // Discard and find next first bit of slice
+                void popFront() nothrow @nogc
                 {
-                    if (empty)
-                    {
-                        throw new RangeError();
-                    }
+                    // Empty check and update firstIndex_
                     if (!Judy1Next(array_, &firstIndex_, NO_ERROR))
                     {
                         firstIndex_ = 1;
@@ -257,6 +281,7 @@ struct Judy1Array
                     }
                 }
 
+                // Find last set bit of slice
                 @property size_t back()
                 {
                     if (empty)
@@ -266,12 +291,10 @@ struct Judy1Array
                     return lastIndex_;
                 }
 
-                void popBack()
+                // Discard and find prev last bit of slice
+                void popBack() nothrow @nogc
                 {
-                    if (empty)
-                    {
-                        throw new RangeError();
-                    }
+                    // Empty check and update lastIndex_
                     if (!Judy1Prev(array_, &lastIndex_, NO_ERROR))
                     {
                         firstIndex_ = 1;
@@ -279,6 +302,7 @@ struct Judy1Array
                     }
                 }
 
+                // Get bit at index. Throws RangeError if index is outside the slice bounds
                 bool opIndex(const size_t index) const
                 {
                     if (index < leftBound_ || index > rightBound_)
@@ -288,17 +312,20 @@ struct Judy1Array
                     return Judy1Test(array_, index, NO_ERROR) == 1;
                 }
 
+                // Return highest set index of slice
                 size_t opDollar()
                 {
                     return back;
                 }
 
-                @property Judy1ArrayRange save()
+                // Save iteration state
+                @property Judy1ArrayRange save() nothrow @nogc
                 {
                     return this;
                 }
 
-                @property auto count() const
+                // Get count of bits set in the range of the slice
+                @property auto count() const nothrow @nogc
                 {
                     return Judy1Count(array_, leftBound_, rightBound_, NO_ERROR);
                 }

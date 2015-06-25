@@ -5,13 +5,19 @@ import core.memory;
 import std.array;
 import std.range;
 
-import judy.external;
+import judy.libjudy;
 
+/*
+   Provides D like wrapper around the libjudy C library.  Currently only supports
+   classes as elements but will support word size and structs in future.
+*/
 struct JudyLArray(ElementType : Object)
 {
     private:
         void* array_;
 
+
+        // Insert element at index. Throws RangeError on insertion error.
         void insert(const size_t index, ElementType value)
         {
             auto element = cast(ElementType**)JudyLIns(&array_, index, NO_ERROR);
@@ -19,10 +25,13 @@ struct JudyLArray(ElementType : Object)
             {
                 throw new RangeError();
             }
+            // Add the instance's address to the GC so it doesn't get collected
             GC.addRoot(cast(void*)value);
             *element = cast(ElementType*)value;
         }
 
+        // Get element at index. Throws RangeError if not found. See `at` for exception
+        // safe version
         ElementType get(const size_t index) const
         {
             auto element = cast(ElementType**)JudyLGet(array_, index, NO_ERROR);
@@ -33,7 +42,8 @@ struct JudyLArray(ElementType : Object)
             return cast(ElementType)(*element);
         }
 
-        bool remove(const size_t index)
+        // Remove element at index
+        bool remove(const size_t index) nothrow
         {
             ElementType element;
             if (!at(index, element))
@@ -45,12 +55,14 @@ struct JudyLArray(ElementType : Object)
 
             if (deleted)
             {
+                // Remove explicit root from GC since instance is back under runtime
                 GC.removeRoot(cast(void*)element);
             }
 
             return deleted;
         }
 
+        // An entry containing the index and element. Used for iteration
         struct JudyLEntry
         {
             private:
@@ -64,12 +76,12 @@ struct JudyLArray(ElementType : Object)
                     this.value_ = value;
                 }
 
-                @property size_t index()
+                @property size_t index() const nothrow @nogc
                 {
                     return index_;
                 }
 
-                @property ElementType value()
+                @property ElementType value() nothrow @nogc
                 {
                     return cast(ElementType)(value_);
                 }
@@ -83,26 +95,29 @@ struct JudyLArray(ElementType : Object)
 
         ~this()
         {
+            // Iterate over all entries and remove them from the GC
             foreach(ref entry; this)
             {
                 GC.removeRoot(cast(void*)entry.value);
             }
+            // Free the actual array
             JudyLFreeArray(&array_, NO_ERROR);
         }
 
-        @property bool empty() const
+        // Is the array empty?
+        @property bool empty() const nothrow @nogc
         {
             return count == 0;
         }
 
-        /* Returns number of elements in the Judy array */
-        @property size_t count() const
+        // Returns number of elements in the Judy array
+        @property size_t count() const nothrow @nogc
         {
             return JudyLCount(array_, 0, -1, NO_ERROR);
         }
 
 
-
+        // Returns the index and element of first entry. Throws range error if empty.
         @property JudyLEntry front() const
         {
             size_t index = 0;
@@ -115,19 +130,13 @@ struct JudyLArray(ElementType : Object)
             throw new RangeError();
         }
 
+        // Removes first element. Throws RangeError if empty.
         void popFront()
         {
-            size_t index = 0;
-            if (first(index))
-            {
-                remove(index);
-            }
-            else
-            {
-                throw new RangeError();
-            }
+            remove(first());
         }
 
+        // Gets index and element of last entry. Throws RangeError if empty.
         @property JudyLEntry back() const
         {
             size_t index = -1;
@@ -140,6 +149,7 @@ struct JudyLArray(ElementType : Object)
             throw new RangeError();
         }
 
+        // Removes last element. Throws RangeError if empty.
         void popBack()
         {
             size_t index = -1;
@@ -153,17 +163,19 @@ struct JudyLArray(ElementType : Object)
             }
         }
 
-
-        auto opSlice() inout
+        // Create a slice over the underlying Judy array
+        auto opSlice() inout nothrow @nogc
         {
             return JudyLArrayRange(array_);
         }
 
-        auto opSlice(const size_t start, const size_t end) inout
+        // Create a slice with given indices over the underlying Judy array
+        auto opSlice(const size_t start, const size_t end) inout nothrow @nogc
         {
             return JudyLArrayRange(array_, start, end);
         }
 
+        // Return highest index of element in array
         size_t opDollar() const
         {
             if (empty)
@@ -174,24 +186,26 @@ struct JudyLArray(ElementType : Object)
         }
         
         
-        
+        // Get element at index
         ElementType opIndex(const size_t index) const
         {
             return get(index);
         }
 
+        // Assign element to index
         void opIndexAssign(ElementType value, const size_t index)
         {
             insert(index, value);
         }
 
+        // Add element at index
         void add(const size_t index, ElementType value)
         {
             insert(index, value);
         }
 
-
-        bool at(const size_t index, out ElementType value) const
+        // Get element at. Return true if found. Places element into value.
+        bool at(const size_t index, out ElementType value) const nothrow @nogc
         {
             auto element = cast(ElementType**)JudyLGet(array_, index, NO_ERROR);
             if (element is null)
@@ -202,14 +216,15 @@ struct JudyLArray(ElementType : Object)
             return true;
         }
 
-        bool has(const size_t index) const
+        // Check if has element at index
+        bool has(const size_t index) const nothrow @nogc
         {
             return JudyLGet(array_, index, NO_ERROR) !is null;
         }
 
 
-        /* Search functions for finding elements */
-        bool first(ref size_t index, out ElementType found) const
+        // Find first element >= index. Returns true if found, sets index and element.
+        bool first(ref size_t index, out ElementType found) const nothrow @nogc
         {
             auto value = cast(ElementType**)JudyLFirst(array_, &index, NO_ERROR);
             if (value == null)
@@ -220,17 +235,20 @@ struct JudyLArray(ElementType : Object)
             return true;
         }
 
-        bool first(ref size_t index) const
+        // Find first elem >= index. Returns true if found. Sets index.
+        bool first(ref size_t index) const nothrow @nogc
         {
             return JudyLFirst(array_, &index, NO_ERROR) !is null;
         }
 
+        // Get index of first element. Throws RangeError if empty.
         size_t first() const
         {
             return front.index;
         }
 
-        bool next(ref size_t index, out ElementType found) const
+        // Find next element > index. Returns true if found. Sets index and element.
+        bool next(ref size_t index, out ElementType found) const nothrow @nogc
         {
             auto value = cast(ElementType**)JudyLNext(array_, &index, NO_ERROR);
             if (value == null)
@@ -241,12 +259,14 @@ struct JudyLArray(ElementType : Object)
             return true;
         }
 
-        bool next(ref size_t index) const
+        // Find next element > index. Returns true if found. Sets index.
+        bool next(ref size_t index) const nothrow @nogc
         {
             return JudyLNext(array_, &index, NO_ERROR) !is null;
         }
 
-        bool prev(ref size_t index, out ElementType found) const
+        // Find prev element < index. Returns true if found. Sets index and element.
+        bool prev(ref size_t index, out ElementType found) const nothrow @nogc
         {
             auto value = cast(ElementType**)JudyLPrev(array_, &index, NO_ERROR);
             if (value == null)
@@ -257,12 +277,14 @@ struct JudyLArray(ElementType : Object)
             return true;
         }
 
-        bool prev(ref size_t index) const
+        // Find prev element < index. Returns true if found. Sets index
+        bool prev(ref size_t index) const nothrow @nogc
         {
             return JudyLPrev(array_, &index, NO_ERROR) !is null;
         }
 
-        bool last(ref size_t index, out ElementType found) const
+        // Find last element <= index. Returns true if found. Sets index and element.
+        bool last(ref size_t index, out ElementType found) const nothrow @nogc
         {
             auto value = cast(ElementType**)JudyLLast(array_, &index, NO_ERROR);
             if (value == null)
@@ -273,52 +295,58 @@ struct JudyLArray(ElementType : Object)
             return true;
         }
 
+        // Find last element <= index. Returns true if found. Sets index.
         bool last(ref size_t index) const
         {
             return JudyLLast(array_, &index, NO_ERROR) !is null;
         }
 
+        // Get index of last element. Throws RangeError if empty.
         size_t last() const
         {
             return back.index;
         }
 
 
-        /* Search functions for finding empty */
-        bool firstEmpty(ref size_t index) const
+        // Find first empty slot >= index. Returns true if found. Sets index.
+        bool firstEmpty(ref size_t index) const nothrow @nogc
         {
             return JudyLFirstEmpty(array_, &index, NO_ERROR) == 1;
         }
 
-        bool nextEmpty(ref size_t index) const
+        // Find next empty slot > index. Returns true if found. Sets index.
+        bool nextEmpty(ref size_t index) const nothrow @nogc
         {
             return JudyLNextEmpty(array_, &index, NO_ERROR) == 1;
         }
 
-        bool prevEmpty(ref size_t index) const
+        // Find prev empty slot < index. Returns true if found. Sets index.
+        bool prevEmpty(ref size_t index) const nothrow @nogc
         {
             return JudyLPrevEmpty(array_, &index, NO_ERROR) == 1;
         }
 
-        bool lastEmpty(ref size_t index) const
+        // Find last empty slot <= index. Returns true if found. Sets index.
+        bool lastEmpty(ref size_t index) const nothrow @nogc
         {
             return JudyLLastEmpty(array_, &index, NO_ERROR) == 1;
         }
 
 
-
-        @property size_t memUsed() const
+        // Gets total amount of memory used by population and infrastructure
+        @property size_t memUsed() const nothrow @nogc
         {
             return JudyLMemUsed(array_);
         }
 
-        @property size_t memActive() const
+        // Gets total amount of memory used by population (pointers only)
+        @property size_t memActive() const nothrow @nogc
         {
             return JudyLMemActive(array_);
         }
 
 
-        /* Iteration struct, allows fast read only iteration of the underlying Judy array */
+        // Iteration struct, allows fast read only iteration of the underlying Judy array
         struct JudyLArrayRange
         {
             private:
@@ -331,12 +359,14 @@ struct JudyLArray(ElementType : Object)
                 const void* array_;
 
             public:
-                this(const void* array)
+                // Construct slice over entire array
+                this(const void* array) nothrow @nogc
                 {
                     this(array, 0UL, -1UL);
                 }
 
-                this (const void* array, const size_t firstIndex, const size_t lastIndex)
+                // Construct slice over given range
+                this (const void* array, const size_t firstIndex, const size_t lastIndex) nothrow @nogc
                 {
                     array_ = array;
                     leftBound_ = firstIndex_ = firstIndex;
@@ -355,11 +385,13 @@ struct JudyLArray(ElementType : Object)
                     }
                 }
 
-                @property bool empty() const
+                // Is slice empty?
+                @property bool empty() const nothrow @nogc
                 {
                     return frontPtr_ is null;
                 }
 
+                // Get first element/index of slice. Throws RangeError if empty.
                 @property JudyLEntry front()
                 {
                     if (frontPtr_ is null)
@@ -369,10 +401,12 @@ struct JudyLArray(ElementType : Object)
                     return JudyLEntry(firstIndex_, frontPtr_);
                 }
 
-                void popFront()
+                // Discard first element and find next
+                void popFront() nothrow @nogc
                 {
                     auto element = cast(ElementType**)JudyLNext(array_, &firstIndex_, NO_ERROR);
 
+                    // Empty check
                     if (element is null)
                     {
                         frontPtr_ = null;
@@ -384,6 +418,7 @@ struct JudyLArray(ElementType : Object)
                     }
                 }
 
+                // Get last element/index of slice. Throws RangeError if empty.
                 @property JudyLEntry back()
                 {
                     if (backPtr_ is null)
@@ -393,7 +428,8 @@ struct JudyLArray(ElementType : Object)
                     return JudyLEntry(lastIndex_, backPtr_);
                 }
 
-                void popBack()
+                // Discard last element of slice and find prev
+                void popBack() nothrow @nogc
                 {
                     auto element = cast(ElementType**)JudyLPrev(array_, &lastIndex_, NO_ERROR);
                     if (element is null)
@@ -407,6 +443,7 @@ struct JudyLArray(ElementType : Object)
                     }
                 }
 
+                // Get element at index. Throws RangeError if out of bounds or not found.
                 ElementType opIndex(size_t index) const
                 {
                     if (index < leftBound_ || index > rightBound_)
@@ -424,12 +461,14 @@ struct JudyLArray(ElementType : Object)
                     return cast(ElementType)(*element);
                 }
 
-                @property JudyLArrayRange save()
+                // Save iteration state
+                @property JudyLArrayRange save() nothrow @nogc
                 {
                     return this;
                 }
 
-                @property auto count() const
+                // Get count of population in slice
+                @property auto count() const nothrow @nogc
                 {
                     return JudyLCount(array_, leftBound_, rightBound_, NO_ERROR);
                 }
