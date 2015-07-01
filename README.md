@@ -168,9 +168,9 @@ Because the underlying libJudy is implemented in C, objects passed to JudyLArray
 
 When a JudyLArray goes out of scope it will be freed, as well as removing GC roots for every item in the array.
 
-If you are using malloced memory or your own allocator you can turn off the default GC behaviour by passing false as the second template parameter.  Note that your should then explicitly free your array contents as this memory may become unreachable and leak.
+If you are using malloced memory or your own allocator you can turn off the default GC behaviour by passing `false` as the second template parameter.  Note that you should then explicitly free your array contents as this memory may become unreachable and leak.
 
-Arrays are not supported.  Note that dynamic and associative arrays may be moved when resized, causing the pointer in libjudy to become invalidated.
+Arrays are not supported as dynamic and associative arrays may be moved when resized, causing the pointer in libjudy to become invalidated.
 
 ### Judy1 API
 
