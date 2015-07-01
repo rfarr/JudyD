@@ -41,7 +41,7 @@ void main()
     assert(array.back == 123456789);
 
     // Slicing
-    foreach(index; array[0..10]) // note laste idex is inclusive
+    foreach(index; array[0..10]) // note last index is inclusive
     {
         writeln(index); // 3, 5
     }
@@ -160,6 +160,7 @@ void main()
 
     array[123] = new Bar();
 }
+```
 
 ### Memory Considerations
 
