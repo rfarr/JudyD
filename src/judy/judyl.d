@@ -4,101 +4,55 @@ import core.exception;
 import core.memory;
 import std.array;
 import std.range;
+import std.traits;
 
 import judy.libjudy;
 
 /*
-   Provides D like wrapper around the libjudy C library.  Currently only supports
-   classes as elements but will support word size and structs in future.
+    Provides D like wrapper around the libjudy C library.  Items in the array
+    are indexed by size_t.
+
+    Supports containing the following types:
+
+        - Heap allocated references (classes)
+        - Pointers to heap allocated structs, primitives (no indirections)
+        - Stack scalar types (these are copied)
+
+    Since libjudy is a C library, management of memory becomes an issue.
+    By default for non scalar types JudyLArray will add stored
+    items to the GC's roots.  This ensures that if the only pointer
+    to your items is within the judy array that the items will not
+    be collected.
+
+    If you don't want to use the GC (you're using malloc or your own allocator),
+    then it can be turned off by passing UseGC = false to the template
+    parameters.
+
+    NOTE: Passing in pointers to anything on the stack is very bad
+    and will probably cause nasty things to happen.  JudyLArray
+    assumes (other than for primitives which it just copies into itself)
+    that your items are long living and won't be freed
+    out from underneath it. You have been warned.
 */
-struct JudyLArray(ElementType : Object)
+struct JudyLArray(ElementType, bool UseGC = true) if (
+    isPointer!ElementType && !hasIndirections!(PointerTarget!ElementType) ||
+    is(ElementType : Object) ||
+    isScalarType!ElementType
+)
 {
-    private:
-        void* array_;
-
-
-        // Insert element at index. Throws RangeError on insertion error.
-        void insert(const size_t index, ElementType value)
-        {
-            auto element = cast(ElementType**)JudyLIns(&array_, index, NO_ERROR);
-            if (element is null)
-            {
-                throw new RangeError();
-            }
-            // Add the instance's address to the GC so it doesn't get collected
-            GC.addRoot(cast(void*)value);
-            *element = cast(ElementType*)value;
-        }
-
-        // Get element at index. Throws RangeError if not found. See `at` for exception
-        // safe version
-        ElementType get(const size_t index) const
-        {
-            auto element = cast(ElementType**)JudyLGet(array_, index, NO_ERROR);
-            if (element is null)
-            {
-                throw new RangeError();
-            }
-            return cast(ElementType)(*element);
-        }
-
-        // Remove element at index
-        bool remove(const size_t index) nothrow
-        {
-            ElementType element;
-            if (!at(index, element))
-            {
-                return false;
-            }
-
-            auto deleted = JudyLDel(&array_, index, NO_ERROR) == 1;
-
-            if (deleted)
-            {
-                // Remove explicit root from GC since instance is back under runtime
-                GC.removeRoot(cast(void*)element);
-            }
-
-            return deleted;
-        }
-
-        // An entry containing the index and element. Used for iteration
-        struct JudyLEntry
-        {
-            private:
-                const size_t index_;
-                ElementType* value_;
-
-            public:
-                this(const size_t index, ElementType* value)
-                {
-                    this.index_ = index;
-                    this.value_ = value;
-                }
-
-                @property size_t index() const nothrow @nogc
-                {
-                    return index_;
-                }
-
-                @property ElementType value() nothrow @nogc
-                {
-                    return cast(ElementType)(value_);
-                }
-        }
-
-
     public:
-
-        @disable
+        @disable // no copying
         this(this);
 
         ~this()
         {
-            // Iterate over all entries and remove them from the GC
-            foreach(ref entry; this)
+            static if (UseGC)
             {
-                GC.removeRoot(cast(void*)entry.value);
+                // Iterate over all entries and remove them from the GC
+                foreach(ref entry; this)
+                {
+                    GC.removeRoot(cast(void*)entry.value);
+                }
             }
             // Free the actual array
             JudyLFreeArray(&array_, NO_ERROR);
@@ -207,7 +161,7 @@ struct JudyLArray(ElementType : Object)
         // Get element at. Return true if found. Places element into value.
         bool at(const size_t index, out ElementType value) const nothrow @nogc
         {
-            auto element = cast(ElementType**)JudyLGet(array_, index, NO_ERROR);
+            auto element = JudyLGet(array_, index, NO_ERROR);
             if (element is null)
             {
                 return false;
@@ -345,19 +299,88 @@ struct JudyLArray(ElementType : Object)
             return JudyLMemActive(array_);
         }
 
+    private:
+        void* array_;
+
+        // Insert element at index. Throws RangeError on insertion error.
+        void insert(const size_t index, ElementType value)
+        {
+            auto element = JudyLIns(&array_, index, NO_ERROR);
+            if (element is null)
+            {
+                throw new RangeError();
+            }
+            static if (UseGC && hasIndirections!ElementType)
+            {
+                GC.addRoot(cast(void*)value);
+            }
+            *element = cast(ElementType*)value;
+        }
+
+        /* Get element at index. Throws RangeError if not found. See `at`
+           for exception safe version
+        */
+        ElementType get(const size_t index) const
+        {
+            auto element = JudyLGet(array_, index, NO_ERROR);
+            if (element is null)
+            {
+                throw new RangeError();
+            }
+            return cast(ElementType)(*element);
+        }
+
+        // Remove element at index
+        bool remove(const size_t index) nothrow
+        {
+            ElementType element;
+            if (!at(index, element))
+            {
+                return false;
+            }
+
+            auto deleted = JudyLDel(&array_, index, NO_ERROR) == 1;
+
+            if (deleted)
+            {
+                // Remove explicit root from GC since instance is back under runtime
+                static if (UseGC && hasIndirections!ElementType)
+                {
+                    GC.removeRoot(cast(void*)element);
+                }
+            }
+
+            return deleted;
+        }
+
+        // An entry containing the index and element. Used for iteration
+        struct JudyLEntry
+        {
+            private:
+                const size_t index_;
+                ElementType* value_;
+
+            public:
+                this(const size_t index, ElementType* value)
+                {
+                    this.index_ = index;
+                    this.value_ = value;
+                }
+
+                @property size_t index() const nothrow @nogc
+                {
+                    return index_;
+                }
+
+                @property ElementType value() nothrow @nogc
+                {
+                    return cast(ElementType)(value_);
+                }
+        }
 
         // Iteration struct, allows fast read only iteration of the underlying Judy array
         struct JudyLArrayRange
         {
-            private:
-                ElementType* frontPtr_;
-                ElementType* backPtr_;
-                size_t leftBound_;
-                size_t rightBound_;
-                size_t firstIndex_;
-                size_t lastIndex_;
-                const void* array_;
-
             public:
                 // Construct slice over entire array
                 this(const void* array) nothrow @nogc
@@ -472,6 +495,15 @@ struct JudyLArray(ElementType : Object)
                 {
                     return JudyLCount(array_, leftBound_, rightBound_, NO_ERROR);
                 }
+
+            private:
+                ElementType* frontPtr_;
+                ElementType* backPtr_;
+                size_t leftBound_;
+                size_t rightBound_;
+                size_t firstIndex_;
+                size_t lastIndex_;
+                const void* array_;
         }
 }
 
@@ -498,12 +530,23 @@ version(unittest)
           return to!string(x);
         }
     }
+
+    struct Point
+    {
+        int x;
+        int y;
+
+        ~this()
+        {
+            writeln(this);
+        }
+    }
 }
 
 
 unittest
 {
-    writeln("[JudyL UnitTest] - count");
+    writeln("[UnitTest JudyL] - count");
 
     auto array = JudyLArray!Data();
 
@@ -526,7 +569,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - empty");
+    writeln("[UnitTest JudyL] - empty");
 
     auto array = JudyLArray!Data();
 
@@ -547,7 +590,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - has");
+    writeln("[UnitTest JudyL] - has");
 
     auto array = JudyLArray!Data();
 
@@ -569,7 +612,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - at");
+    writeln("[UnitTest JudyL] - at");
 
     auto array = JudyLArray!Data();
 
@@ -593,7 +636,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - add");
+    writeln("[UnitTest JudyL] - add");
 
     auto array = JudyLArray!Data();
 
@@ -612,7 +655,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - opIndexAssign");
+    writeln("[UnitTest JudyL] - opIndexAssign");
 
     auto array = JudyLArray!Data();
 
@@ -634,7 +677,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - opIndex");
+    writeln("[UnitTest JudyL] - opIndex");
 
     auto array = JudyLArray!Data();
 
@@ -653,7 +696,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - remove");
+    writeln("[UnitTest JudyL] - remove");
 
     auto array = JudyLArray!Data();
 
@@ -669,7 +712,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - forward iteration");
+    writeln("[UnitTest JudyL] - forward iteration");
 
     auto array = JudyLArray!Data();
 
@@ -704,7 +747,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - front and back");
+    writeln("[UnitTest JudyL] - front and back");
 
     auto array = JudyLArray!Data();
 
@@ -754,7 +797,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - popFront and popBack");
+    writeln("[UnitTest JudyL] - popFront and popBack");
 
     auto array = JudyLArray!Data();
 
@@ -796,7 +839,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - free memory");
+    writeln("[UnitTest JudyL] - free memory");
 
     JudyLArray!Data* ptr;
 
@@ -836,7 +879,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - opSlice");
+    writeln("[UnitTest JudyL] - opSlice");
 
     auto array = JudyLArray!Data();
 
@@ -909,7 +952,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - opSlice[x..y]");
+    writeln("[UnitTest JudyL] - opSlice[x..y]");
 
     auto array = JudyLArray!Data();
 
@@ -992,7 +1035,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - opDollar");
+    writeln("[UnitTest JudyL] - opDollar");
 
     auto array = JudyLArray!Data();
 
@@ -1037,7 +1080,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - find in empty array");
+    writeln("[UnitTest JudyL] - find in empty array");
 
     auto array = JudyLArray!Data();
 
@@ -1063,7 +1106,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - find with single element at start");
+    writeln("[UnitTest JudyL] - find with single element at start");
 
     auto array = JudyLArray!Data();
 
@@ -1170,7 +1213,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - find with single element at end");
+    writeln("[UnitTest JudyL] - find with single element at end");
 
     auto array = JudyLArray!Data();
 
@@ -1276,7 +1319,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - find with single element in middle");
+    writeln("[UnitTest JudyL] - find with single element in middle");
 
     auto array = JudyLArray!Data();
 
@@ -1398,7 +1441,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - find with multiple elements");
+    writeln("[UnitTest JudyL] - find with multiple elements");
 
     auto array = JudyLArray!Data();
 
@@ -1521,7 +1564,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - find empty in empty array");
+    writeln("[UnitTest JudyL] - find empty in empty array");
 
     auto array = JudyLArray!Data();
 
@@ -1546,7 +1589,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - find empty with single element at start");
+    writeln("[UnitTest JudyL] - find empty with single element at start");
 
     auto array = JudyLArray!Data();
 
@@ -1574,7 +1617,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - find empty with single element at end");
+    writeln("[UnitTest JudyL] - find empty with single element at end");
 
     auto array = JudyLArray!Data();
 
@@ -1600,7 +1643,7 @@ unittest
 
 unittest
 {
-    writeln("[JudyL UnitTest] - find empty with single element in middle");
+    writeln("[UnitTest JudyL] - find empty with single element in middle");
 
     auto array = JudyLArray!Data();
 
@@ -1660,4 +1703,70 @@ unittest
     index = 10;
     assert(array.lastEmpty(index), "Find last empty");
     assert(index == 9);
+}
+
+unittest
+{
+    writeln("[UnitTest JudyL] - struct pointer");
+
+    auto array = JudyLArray!(Point*)();
+
+    {
+        auto point1 = new Point(1, 1);
+        auto point2 = new Point(2, 2);
+
+        array[0] = point1;
+        array[1] = point2;
+    }
+
+    assert(array[0].x == 1);
+    assert(array[0].y == 1);
+
+    assert(array[1].x == 2);
+    assert(array[1].y == 2);
+
+    array.remove(0);
+    array.remove(1);
+}
+
+unittest
+{
+    writeln("[UnitTest JudyL] - primitive pointer");
+
+    auto array = JudyLArray!(int*)();
+
+    {
+        auto data1 = new int(7);
+        auto data2 = new int(10);
+
+        array[0] = data1;
+        array[1] = data2;
+    }
+
+    assert(*array[0] == 7);
+    assert(*array[1] == 10);
+
+    array.remove(0);
+    array.remove(1);
+}
+
+unittest
+{
+    writeln("[UnitTest JudyL] - primitive");
+
+    auto array = JudyLArray!(int)();
+
+    {
+        array[0] = 7;
+        array[1] = 10;
+        array[0] = 3;
+        array[2] = array[0] * array[1];
+    }
+
+    assert(array[0] == 3);
+    assert(array[1] == 10);
+    assert(array[2] == 30);
+
+    array.remove(0);
+    array.remove(1);
 }

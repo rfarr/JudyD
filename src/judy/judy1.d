@@ -342,7 +342,7 @@ version(unittest)
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - empty");
+    writeln("[UnitTest Judy1] - empty");
 
     auto array = Judy1Array();
 
@@ -360,7 +360,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - count");
+    writeln("[UnitTest Judy1] - count");
 
     auto array = Judy1Array();
 
@@ -382,7 +382,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - front and back");
+    writeln("[UnitTest Judy1] - front and back");
 
     auto array = Judy1Array();
 
@@ -412,7 +412,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - popFront and popBack");
+    writeln("[UnitTest Judy1] - popFront and popBack");
 
     auto array = Judy1Array();
 
@@ -442,7 +442,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - opDollar");
+    writeln("[UnitTest Judy1] - opDollar");
 
     auto array = Judy1Array();
 
@@ -456,7 +456,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - opIndex");
+    writeln("[UnitTest Judy1] - opIndex");
 
     auto array = Judy1Array();
 
@@ -476,7 +476,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - set and unset");
+    writeln("[UnitTest Judy1] - set and unset");
 
     auto array = Judy1Array();
 
@@ -493,7 +493,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - find in empty array");
+    writeln("[UnitTest Judy1] - find in empty array");
 
     auto array = Judy1Array();
 
@@ -514,7 +514,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - find in array with single bit at start");
+    writeln("[UnitTest Judy1] - find in array with single bit at start");
 
     auto array = Judy1Array();
     array[0] = true;
@@ -546,7 +546,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - find in array with multiple in middle");
+    writeln("[UnitTest Judy1] - find in array with multiple in middle");
 
     auto array = Judy1Array();
     array[10] = true;
@@ -615,7 +615,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - find in array with single bit at end");
+    writeln("[UnitTest Judy1] - find in array with single bit at end");
 
     auto array = Judy1Array();
     auto END = size_t.max;
@@ -647,7 +647,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - find empty in empty array");
+    writeln("[UnitTest Judy1] - find empty in empty array");
 
     auto array = Judy1Array();
 
@@ -676,7 +676,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - find empty with single element at start");
+    writeln("[UnitTest Judy1] - find empty with single element at start");
 
     auto array = Judy1Array();
     array[0] = true;
@@ -706,7 +706,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - find empty with single element in middle");
+    writeln("[UnitTest Judy1] - find empty with single element in middle");
 
     auto array = Judy1Array();
     array[10] = true;
@@ -738,7 +738,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - iteration");
+    writeln("[UnitTest Judy1] - iteration");
 
     auto array = Judy1Array();
     auto setrange = iota(100, 1000, 10);
@@ -770,7 +770,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - free memory");
+    writeln("[UnitTest Judy1] - free memory");
 
     Judy1Array* ptr;
 
@@ -802,7 +802,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - opSlice");
+    writeln("[UnitTest Judy1] - opSlice");
 
     auto array = Judy1Array();
 
@@ -855,7 +855,7 @@ unittest
 
 unittest
 {
-    writeln("[Judy1 UnitTest] - opSlice[x..y]");
+    writeln("[UnitTest Judy1] - opSlice[x..y]");
 
     auto array = Judy1Array();
 
