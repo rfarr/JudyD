@@ -52,6 +52,7 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
                 foreach(ref entry; this)
                 {
                     GC.removeRoot(cast(void*)entry.value);
+                    GC.clrAttr(cast(void*)entry.value, GC.BlkAttr.NO_MOVE);
                 }
             }
             // Free the actual array
@@ -313,6 +314,7 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
             static if (UseGC && hasIndirections!ElementType)
             {
                 GC.addRoot(cast(void*)value);
+                GC.setAttr(cast(void*)value, GC.BlkAttr.NO_MOVE);
             }
             *element = cast(ElementType*)value;
         }
@@ -347,6 +349,7 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
                 static if (UseGC && hasIndirections!ElementType)
                 {
                     GC.removeRoot(cast(void*)element);
+                    GC.clrAttr(cast(void*)element, GC.BlkAttr.NO_MOVE);
                 }
             }
 
