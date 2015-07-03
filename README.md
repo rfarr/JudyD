@@ -62,7 +62,7 @@ void main()
 
 ### JudyL Usage
 
-JudyL maps size_t to size_t.  In practice the mapped value is a pointer to an object on the heap but can also be a scalar.
+JudyL maps size_t to size_t.  In practice the mapped value is usually a pointer to an object on the heap but can also be a scalar.
 
 Scalar example:
 
@@ -172,13 +172,15 @@ If you are using malloced memory or your own allocator you can turn off the defa
 
 Arrays are not supported as dynamic and associative arrays may be moved when resized, causing the pointer in libjudy to become invalidated.
 
+*NOTE*: Passing in pointers to anything on the stack is very bad and will probably cause nasty things to happen.  JudyLArray assumes (other than for primitives which it just copies into itself) that your items are long living and won't be freed out from underneath it. If you do use items on the stack make sure they don't go out of scope for the lifetime of the array.  You have been warned.  
+
 ### Judy1 API
 
 ```d
 // Returns if array is empty (ie no bits set)
 @property bool empty() const nothrow @nogc
 
-// Returns number of set bit in the Judy array
+// Returns number of set bits in the Judy array
 @property size_t count() const nothrow @nogc
 
 // Get lowest index of set bit
@@ -354,3 +356,22 @@ struct JudyLEntry
     @property ElementType value() nothrow @nogc
 }
 ```
+
+### See Also
+
+[Judy Arrays](http://judy.sourceforge.net/) - the reference implementation and documentation
+
+[judyarray](https://code.google.com/p/judyarray/) - an alternative C implementation
+
+[Presentation on Judy Arrays](https://www.youtube.com/watch?v=123esmJWJTE&feature=youtu.be&t=1m3s) - a presentation I gave on Judy Arrays, slides available [here](http://nxbit.io/presentations/judy-arrays/)
+
+### Author
+
+Richard Farr, `<richard@nxbit.io>`
+
+### Copyright & License
+
+Copyright (c) 2015, Richard Farr
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
