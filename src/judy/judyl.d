@@ -107,15 +107,7 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
         // Removes last element. Throws RangeError if empty.
         void popBack()
         {
-            size_t index = -1;
-            if (last(index))
-            {
-                remove(index);
-            }
-            else
-            {
-                throw new RangeError();
-            }
+            remove(last());
         }
 
         // Create a slice over the underlying Judy array
