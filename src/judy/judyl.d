@@ -46,7 +46,7 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
 
         ~this()
         {
-            static if (UseGC)
+            static if (UseGC && hasIndirections!ElementType)
             {
                 // Iterate over all entries and remove them from the GC
                 foreach(ref entry; this)
