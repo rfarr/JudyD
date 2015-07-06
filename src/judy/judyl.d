@@ -71,6 +71,11 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
             return JudyLCount(array_, 0, -1, NO_ERROR);
         }
 
+        @property auto length() const nothrow @nogc
+        {
+            return size_t.sizeof;
+        }
+
 
         // Returns the index and element of first entry. Throws range error if empty.
         @property JudyLEntry front() const
@@ -390,17 +395,8 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
                     leftBound_ = firstIndex_ = firstIndex;
                     rightBound_ = lastIndex_ = lastIndex;
 
-                    auto element = cast(ElementType**)JudyLFirst(array, &firstIndex_, NO_ERROR);
-                    if (element !is null)
-                    {
-                        frontPtr_ = *element;
-                    }
-
-                    element = cast(ElementType**)JudyLLast(array, &lastIndex_, NO_ERROR);
-                    if (element !is null)
-                    {
-                        backPtr_ = *element;
-                    }
+                    frontPtr_ = cast(ElementType**)JudyLFirst(array, &firstIndex_, NO_ERROR);
+                    backPtr_ = cast(ElementType**)JudyLLast(array, &lastIndex_, NO_ERROR);
                 }
 
                 // Is slice empty?
@@ -409,55 +405,49 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
                     return frontPtr_ is null;
                 }
 
-                // Get first element/index of slice. Throws RangeError if empty.
-                @property JudyLEntry front()
+                // Get first element/index of slice.
+                @property JudyLEntry front() nothrow @nogc
+                in
                 {
-                    if (frontPtr_ is null)
-                    {
-                        throw new RangeError();
-                    }
-                    return JudyLEntry(firstIndex_, frontPtr_);
+                    assert(!empty);
+                }
+                body
+                {
+                    return JudyLEntry(firstIndex_, *frontPtr_);
                 }
 
                 // Discard first element and find next
                 void popFront() nothrow @nogc
                 {
-                    auto element = cast(ElementType**)JudyLNext(array_, &firstIndex_, NO_ERROR);
+                    frontPtr_ = cast(ElementType**)JudyLNext(array_, &firstIndex_, NO_ERROR);
 
                     // Empty check
-                    if (element is null)
+                    if (frontPtr_ is null)
                     {
-                        frontPtr_ = null;
-                        backPtr_ = null;
-                    }
-                    else
-                    {
-                        frontPtr_ = *element;
+                       backPtr_ = null;
                     }
                 }
 
-                // Get last element/index of slice. Throws RangeError if empty.
-                @property JudyLEntry back()
+                // Get last element/index of slice.
+                @property JudyLEntry back() nothrow @nogc
+                in
                 {
-                    if (backPtr_ is null)
-                    {
-                        throw new RangeError();
-                    }
-                    return JudyLEntry(lastIndex_, backPtr_);
+                    assert(!empty);
+                }
+                body
+                {
+                    return JudyLEntry(lastIndex_, *backPtr_);
                 }
 
                 // Discard last element of slice and find prev
                 void popBack() nothrow @nogc
                 {
-                    auto element = cast(ElementType**)JudyLPrev(array_, &lastIndex_, NO_ERROR);
-                    if (element is null)
+                    backPtr_ = cast(ElementType**)JudyLPrev(array_, &lastIndex_, NO_ERROR);
+
+                    // Empty check
+                    if (backPtr_ is null)
                     {
                         frontPtr_ = null;
-                        backPtr_ = null;
-                    }
-                    else
-                    {
-                        backPtr_ = *element;
                     }
                 }
 
@@ -476,7 +466,7 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
                         throw new RangeError();
                     }
 
-                    return cast(ElementType)(*element);
+                    return cast(ElementType)*element;
                 }
 
                 // Save iteration state
@@ -491,15 +481,28 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
                     return JudyLCount(array_, leftBound_, rightBound_, NO_ERROR);
                 }
 
+                @property auto length() const nothrow @nogc
+                {
+                    return size_t.sizeof;
+                }
+
             private:
-                ElementType* frontPtr_;
-                ElementType* backPtr_;
+                ElementType** frontPtr_;
+                ElementType** backPtr_;
                 size_t leftBound_;
                 size_t rightBound_;
                 size_t firstIndex_;
                 size_t lastIndex_;
                 const void* array_;
         }
+
+        static assert(isInputRange!JudyLArray);
+        static assert(!isBidirectionalRange!JudyLArray);
+        static assert(!isRandomAccessRange!JudyLArray);
+
+        static assert(isForwardRange!JudyLArrayRange);
+        static assert(isBidirectionalRange!JudyLArrayRange);
+        static assert(!isRandomAccessRange!JudyLArrayRange);
 }
 
 
