@@ -15,7 +15,7 @@ import judy.libjudy;
     Supports containing the following types:
 
         - Heap allocated references (classes)
-        - Pointers to heap allocated structs, primitives (no indirections)
+        - Pointers to heap allocated structs, primitives (no arrays)
         - Stack scalar types (these are copied)
 
     Since libjudy is a C library, management of memory becomes an issue.
@@ -35,14 +35,13 @@ import judy.libjudy;
     out from underneath it. You have been warned.
 */
 struct JudyLArray(ElementType, bool UseGC = true) if (
-    isPointer!ElementType && !hasIndirections!(PointerTarget!ElementType) ||
+    isPointer!ElementType && !isArray!(PointerTarget!ElementType) ||
     is(ElementType : Object) ||
     isScalarType!ElementType
 )
 {
     public:
-        @disable // no copying
-        this(this);
+        @disable this(this);
 
         ~this()
         {
