@@ -140,7 +140,6 @@ struct Judy1Array
             return Judy1Unset(&array_, index, NO_ERROR) == 1;
         }
 
-
         
         // Find first set bit and place it in index. Return false if not found
         bool first(ref size_t index) const nothrow @nogc
@@ -319,7 +318,7 @@ struct Judy1Array
                 }
 
                 // Save iteration state
-                @property Judy1ArrayRange save() nothrow @nogc
+                @property auto save() nothrow @nogc
                 {
                     return this;
                 }
@@ -330,6 +329,12 @@ struct Judy1Array
                     return Judy1Count(array_, leftBound_, rightBound_, NO_ERROR);
                 }
         }
+
+        static assert(isInputRange!Judy1Array);
+
+        static assert(isInputRange!Judy1ArrayRange);
+        static assert(isForwardRange!Judy1ArrayRange);
+        static assert(isBidirectionalRange!Judy1ArrayRange);
 }
 
 

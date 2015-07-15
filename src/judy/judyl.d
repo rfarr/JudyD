@@ -173,7 +173,6 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
             return JudyLGet(array_, index, NO_ERROR) !is null;
         }
 
-
         // Find first element >= index. Returns true if found, sets index and element.
         bool first(ref size_t index, out ElementType found) const nothrow @nogc
         {
@@ -469,7 +468,7 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
                 }
 
                 // Save iteration state
-                @property JudyLArrayRange save() nothrow @nogc
+                @property auto save() nothrow @nogc
                 {
                     return this;
                 }
@@ -496,12 +495,10 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
         }
 
         static assert(isInputRange!JudyLArray);
-        static assert(!isBidirectionalRange!JudyLArray);
-        static assert(!isRandomAccessRange!JudyLArray);
 
+        static assert(isInputRange!JudyLArrayRange);
         static assert(isForwardRange!JudyLArrayRange);
         static assert(isBidirectionalRange!JudyLArrayRange);
-        static assert(!isRandomAccessRange!JudyLArrayRange);
 }
 
 
