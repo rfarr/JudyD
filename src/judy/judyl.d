@@ -48,7 +48,7 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
             static if (UseGC && hasIndirections!ElementType)
             {
                 // Iterate over all entries and remove them from the GC
-                foreach(ref entry; this)
+                foreach(ref entry; this[])
                 {
                     GC.removeRoot(cast(void*)entry.value);
                     GC.clrAttr(cast(void*)entry.value, GC.BlkAttr.NO_MOVE);
@@ -153,6 +153,30 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
         void add(const size_t index, ElementType value)
         {
             insert(index, value);
+        }
+
+        // Remove element at index
+        bool remove(const size_t index) nothrow
+        {
+            ElementType element;
+            if (!at(index, element))
+            {
+                return false;
+            }
+
+            auto deleted = JudyLDel(&array_, index, NO_ERROR) == 1;
+
+            if (deleted)
+            {
+                // Remove explicit root from GC since instance is back under runtime
+                static if (UseGC && hasIndirections!ElementType)
+                {
+                    GC.removeRoot(cast(void*)element);
+                    GC.clrAttr(cast(void*)element, GC.BlkAttr.NO_MOVE);
+                }
+            }
+
+            return deleted;
         }
 
         // Get element at. Return true if found. Places element into value.
@@ -327,30 +351,6 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
             return cast(ElementType)(*element);
         }
 
-        // Remove element at index
-        bool remove(const size_t index) nothrow
-        {
-            ElementType element;
-            if (!at(index, element))
-            {
-                return false;
-            }
-
-            auto deleted = JudyLDel(&array_, index, NO_ERROR) == 1;
-
-            if (deleted)
-            {
-                // Remove explicit root from GC since instance is back under runtime
-                static if (UseGC && hasIndirections!ElementType)
-                {
-                    GC.removeRoot(cast(void*)element);
-                    GC.clrAttr(cast(void*)element, GC.BlkAttr.NO_MOVE);
-                }
-            }
-
-            return deleted;
-        }
-
         // An entry containing the index and element. Used for iteration
         struct JudyLEntry
         {
@@ -503,8 +503,9 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
 
 
 
-version(unittest)
+version (unittest)
 {
+    import std.algorithm;
     import std.conv;
     import std.exception;
     import std.stdio;
@@ -518,22 +519,12 @@ version(unittest)
         }
 
         int x;
-
-        override string toString()
-        {
-          return to!string(x);
-        }
     }
 
     struct Point
     {
         int x;
         int y;
-
-        ~this()
-        {
-            writeln(this);
-        }
     }
 }
 

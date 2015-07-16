@@ -25,7 +25,7 @@ extern(C)
     {
         Errno errno;
         int errID;
-        size_t reserved[4];
+        size_t[4] reserved;
     }
 
     Error* NO_ERROR = null;

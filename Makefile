@@ -22,7 +22,7 @@ test:
 	$(DMD) -ofbuilds/judyd_test $(TEST_DFLAGS) $(SRCS) $(LIBJUDY)
 	builds/judyd_test
 
-examples: judy1 judy1l
+examples: judy1 judyl
 
 judy1:
 	$(DMD) -ofbuilds/judy1 $(INCLUDES) $(RELEASE_DFLAGS) examples/judy1.d $(LIBJUDYD)
