@@ -1,0 +1,35 @@
+LDC=/usr/bin/env ldc2
+DFLAGS=-od=$(BUILDS)/obj -oq
+LIB_DFLAGS=-lib
+RELEASE_DFLAGS=-O -release -w -g
+TEST_DFLAGS=-main -unittest -w -g
+
+BUILDS=builds
+INCLUDES=-Isrc/
+
+LIBJUDY=/usr/local/lib/libJudy.a
+LIBJUDYD=$(BUILDS)/libjudyd.a
+
+SRCS=src/judy/*.d
+
+.PHONY: clean
+
+all: lib test examples
+
+lib:
+	$(LDC) -of=$(LIBJUDYD) $(DFLAGS) $(LIB_DFLAGS) $(RELEASE_DFLAGS) $(SRCS) $(LIBJUDY)
+
+test:
+	$(LDC) -of=builds/judyd_test $(DFLAGS) $(TEST_DFLAGS) $(SRCS) $(LIBJUDY)
+	builds/judyd_test
+
+examples: judy1 judyl
+
+judy1:
+	$(LDC) -of=builds/judy1 $(INCLUDES) $(DFLAGS) $(RELEASE_DFLAGS) examples/judy1.d $(LIBJUDYD) $(LIBJUDY)
+
+judyl:
+	$(LDC) -of=builds/judyl $(INCLUDES) $(DFLAGS) $(RELEASE_DFLAGS) examples/judyl.d $(LIBJUDYD) $(LIBJUDY)
+
+clean:
+	rm -rf builds
