@@ -370,7 +370,7 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
                     return index_;
                 }
 
-                @property ElementType value() nothrow @nogc
+                @property inout(ElementType) value() inout nothrow @nogc
                 {
                     return cast(ElementType)(value_);
                 }
@@ -727,6 +727,47 @@ unittest
         assert(data.index == testrange[j]);
         assert(data.value == array[testrange[j++]]);
     }
+    assert(array.count == testrange.length, "Forward iteration leaves data intact");
+}
+
+unittest
+{
+    writeln("[UnitTest JudyL] - forward const iteration");
+
+    auto array = JudyLArray!Data();
+
+    auto testrange = iota(100, 1000, 10);
+
+    Data[int] datas = assocArray(
+        zip(
+            testrange,
+            map!(a => new Data(a))(testrange).array
+        )
+    );
+
+    foreach(data; array)
+    {
+        assert(false, "Empty array");
+    }
+
+    // Insert some elements
+    foreach(i; testrange)
+    {
+        array[i] = datas[i];
+    }
+
+    auto cb = (const ref JudyLArray!Data array)
+    {
+        auto j = 0;
+        foreach(const data; array)
+        {
+            assert(data.index == testrange[j]);
+            assert(data.value == array[testrange[j++]]);
+        }
+    };
+
+    cb(array);
+
     assert(array.count == testrange.length, "Forward iteration leaves data intact");
 }
 
