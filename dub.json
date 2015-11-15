@@ -1,0 +1,15 @@
+{
+    "name": "logdefer",
+    "description": "Judy Arrays - efficient sparse arrays - bindings/wrappers for the D Programming Language",
+    "homepage": "https://github.com/rfarr/JudyD",
+    "license": "ISC",
+    "authors": [
+        "Richard Farr"
+    ],
+
+    "targetName": "judyd",
+    "targetType": "library",
+    "targetPath": "builds",
+
+    "libs": ["Judy"]
+}

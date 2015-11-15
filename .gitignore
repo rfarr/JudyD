@@ -2,3 +2,5 @@
 *.swo
 *.core
 builds/
+.dub/
+dub.selections.json
