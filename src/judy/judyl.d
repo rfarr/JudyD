@@ -75,9 +75,21 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
             return size_t.sizeof;
         }
 
+        // Returns the index and element of first entry. Throws range error if empty.
+        @property JudyLEntry front()
+        {
+            size_t index = 0;
+            auto value = cast(ElementType**)JudyLFirst(array_, &index, NO_ERROR);
+
+            if (value !is null)
+            {
+                return JudyLEntry(index, *value);
+            }
+            throw new RangeError();
+        }
 
         // Returns the index and element of first entry. Throws range error if empty.
-        @property JudyLEntry front() const
+        @property const(JudyLEntry) front() const
         {
             size_t index = 0;
             auto value = cast(ElementType**)JudyLFirst(array_, &index, NO_ERROR);
@@ -96,7 +108,20 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
         }
 
         // Gets index and element of last entry. Throws RangeError if empty.
-        @property JudyLEntry back() const
+        @property JudyLEntry back()
+        {
+            size_t index = -1;
+            auto value = cast(ElementType**)JudyLLast(array_, &index, NO_ERROR);
+
+            if (value !is null)
+            {
+                return JudyLEntry(index, *value);
+            }
+            throw new RangeError();
+        }
+
+        // Gets index and element of last entry. Throws RangeError if empty.
+        @property const(JudyLEntry) back() const
         {
             size_t index = -1;
             auto value = cast(ElementType**)JudyLLast(array_, &index, NO_ERROR);
@@ -115,15 +140,27 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
         }
 
         // Create a slice over the underlying Judy array
-        auto opSlice() inout nothrow @nogc
+        auto opSlice() nothrow @nogc
         {
-            return JudyLArrayRange(array_);
+            return JudyLArrayRange!()(array_);
+        }
+
+        // Create a slice over the underlying Judy array
+        auto opSlice() const nothrow @nogc
+        {
+            return JudyLArrayRange!(true)(array_);
         }
 
         // Create a slice with given indices over the underlying Judy array
-        auto opSlice(const size_t start, const size_t end) inout nothrow @nogc
+        auto opSlice(const size_t start, const size_t end) nothrow @nogc
         {
-            return JudyLArrayRange(array_, start, end);
+            return JudyLArrayRange!()(array_, start, end);
+        }
+
+        // Create a slice with given indices over the underlying Judy array
+        auto opSlice(const size_t start, const size_t end) const nothrow @nogc
+        {
+            return JudyLArrayRange!(true)(array_, start, end);
         }
 
         // Return highest index of element in array
@@ -136,13 +173,18 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
             return back.index;
         }
         
-        
         // Get element at index
-        ElementType opIndex(const size_t index) const
+        ElementType opIndex(const size_t index)
         {
             return get(index);
         }
-
+        
+        // Get element at index
+        const(ElementType) opIndex(const size_t index) const
+        {
+            return get(index);
+        }
+        
         // Assign element to index
         void opIndexAssign(ElementType value, const size_t index)
         {
@@ -377,7 +419,7 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
         }
 
         // Iteration struct, allows fast read only iteration of the underlying Judy array
-        struct JudyLArrayRange
+        struct JudyLArrayRange(bool isConst=false)
         {
             public:
                 // Construct slice over entire array
@@ -404,14 +446,21 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
                 }
 
                 // Get first element/index of slice.
-                @property JudyLEntry front() nothrow @nogc
+                @property auto front() nothrow @nogc
                 in
                 {
                     assert(!empty);
                 }
                 body
                 {
-                    return JudyLEntry(firstIndex_, *frontPtr_);
+                    static if (isConst)
+                    {
+                        return const(JudyLEntry)(firstIndex_, *frontPtr_);
+                    }
+                    else
+                    {
+                        return JudyLEntry(firstIndex_, *frontPtr_);
+                    }
                 }
 
                 // Discard first element and find next
@@ -427,14 +476,21 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
                 }
 
                 // Get last element/index of slice.
-                @property JudyLEntry back() nothrow @nogc
+                @property auto back() nothrow @nogc
                 in
                 {
                     assert(!empty);
                 }
                 body
                 {
-                    return JudyLEntry(lastIndex_, *backPtr_);
+                    static if (isConst)
+                    {
+                        return const(JudyLEntry)(lastIndex_, *backPtr_);
+                    }
+                    else
+                    {
+                        return JudyLEntry(lastIndex_, *backPtr_);
+                    }
                 }
 
                 // Discard last element of slice and find prev
@@ -450,7 +506,7 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
                 }
 
                 // Get element at index. Throws RangeError if out of bounds or not found.
-                ElementType opIndex(size_t index) const
+                auto opIndex(size_t index) const
                 {
                     if (index < leftBound_ || index > rightBound_)
                     {
@@ -464,7 +520,14 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
                         throw new RangeError();
                     }
 
-                    return cast(ElementType)*element;
+                    static if (isConst)
+                    {
+                        return cast(const(ElementType))*element;
+                    }
+                    else
+                    {
+                        return cast(ElementType)*element;
+                    }
                 }
 
                 // Save iteration state
@@ -496,9 +559,13 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
 
         static assert(isInputRange!JudyLArray);
 
-        static assert(isInputRange!JudyLArrayRange);
-        static assert(isForwardRange!JudyLArrayRange);
-        static assert(isBidirectionalRange!JudyLArrayRange);
+        static assert(isInputRange!(JudyLArrayRange!(false)));
+        static assert(isForwardRange!(JudyLArrayRange!(false)));
+        static assert(isBidirectionalRange!(JudyLArrayRange!(false)));
+
+        static assert(isInputRange!(JudyLArrayRange!(true)));
+        static assert(isForwardRange!(JudyLArrayRange!(true)));
+        static assert(isBidirectionalRange!(JudyLArrayRange!(true)));
 }
 
 
@@ -974,6 +1041,64 @@ unittest
 
     assert(slice[50] == data1, "Array mutation reflected in slice");
     assert(slice[10000] == data2, "Array insertion reflected in slice");
+}
+
+unittest
+{
+    writeln("[UnitTest JudyL] - const opSlice");
+
+    auto array = JudyLArray!Data();
+
+    auto testrange = iota(0, 100);
+
+    Data[int] datas = assocArray(
+        zip(
+            testrange,
+            map!(a => new Data(a))(testrange).array
+        )
+    );
+
+    // Insert some elements
+    foreach(i; testrange)
+    {
+        array[i] = datas[i];
+    }
+
+
+    array.front.value.x = 7;
+
+    auto testIt = delegate(const ref JudyLArray!Data constArray)
+    {
+        assert(array.count == constArray[].count, "Array and slice count the same");
+
+        int j = 0;
+        foreach(ref data; constArray[])
+        {
+            assert(data.index == testrange[j]);
+            assert(data.value == datas[j++], "Forward range iteration");
+        }
+
+        // backwards iteration
+        j = testrange[$-1];
+        foreach(ref data; retro(constArray[]))
+        {
+            assert(data.index == testrange[j]);
+            assert(data.value == datas[j--], "Retrograde range iteration");
+        }
+
+        auto slice = constArray[];
+        foreach(i; testrange)
+        {
+            assert(slice[i] == constArray[i], "Slice random access");
+        }
+
+        assertThrown!RangeError(slice[200], "Out of bounds");
+
+        // can't modify the underlying element
+        assert(!__traits(compiles, constArray[].front.value.x = 3));
+    };
+
+    testIt(array);
 }
 
 unittest
