@@ -16,7 +16,7 @@ import judy.libjudy;
 
         - Heap allocated references (classes)
         - Pointers to heap allocated structs, primitives (no arrays)
-        - Stack scalar types (these are copied)
+        - Scalar types (these are copied, see std.traits.isScalarType)
 
     Since libjudy is a C library, management of memory becomes an issue.
     By default for non scalar types JudyLArray will add stored
@@ -30,7 +30,7 @@ import judy.libjudy;
 
     NOTE: Passing in pointers to anything on the stack is very bad
     and will probably cause nasty things to happen.  JudyLArray
-    assumes (other than for primitives which it just copies into itself)
+    assumes (other than for scalars which it just copies into itself)
     that your items are long living and won't be freed
     out from underneath it. You have been warned.
 */
@@ -48,13 +48,14 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
             static if (UseGC && hasIndirections!ElementType)
             {
                 // Iterate over all entries and remove them from the GC
+                // roots
                 foreach(ref entry; this[])
                 {
                     GC.removeRoot(cast(void*)entry.value);
                     GC.clrAttr(cast(void*)entry.value, GC.BlkAttr.NO_MOVE);
                 }
             }
-            // Free the actual array
+            // Free the actual array structure
             JudyLFreeArray(&array_, NO_ERROR);
         }
 
@@ -208,10 +209,10 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
 
             auto deleted = JudyLDel(&array_, index, NO_ERROR) == 1;
 
-            if (deleted)
+            // Remove explicit root from GC since instance is back under runtime
+            static if (UseGC && hasIndirections!ElementType)
             {
-                // Remove explicit root from GC since instance is back under runtime
-                static if (UseGC && hasIndirections!ElementType)
+                if (deleted)
                 {
                     GC.removeRoot(cast(void*)element);
                     GC.clrAttr(cast(void*)element, GC.BlkAttr.NO_MOVE);
@@ -372,11 +373,15 @@ struct JudyLArray(ElementType, bool UseGC = true) if (
             {
                 throw new RangeError();
             }
+
+            // Add the element's address to the GC roots so it won't
+            // be collected
             static if (UseGC && hasIndirections!ElementType)
             {
                 GC.addRoot(cast(void*)value);
                 GC.setAttr(cast(void*)value, GC.BlkAttr.NO_MOVE);
             }
+
             *element = cast(ElementType*)value;
         }
 

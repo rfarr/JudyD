@@ -62,7 +62,8 @@ void main()
 
 ### JudyL Usage
 
-JudyL maps size_t to size_t.  In practice the mapped value is usually a pointer to an object on the heap but can also be a scalar.
+JudyL maps size_t to size_t.  In practice the mapped value is usually a pointer to an object on the heap but can also be a scalar type (see std.traits.isScalarType) that fits within size_t. In the case of scalar type
+the value is just copied into the Judy array.
 
 Scalar example:
 
@@ -90,13 +91,14 @@ void main()
     assert(!array.empty);
 
     // Iteration
-    foreach(ref entry; array)
+    foreach(entry; array)
     {
         writeln(entry.index); // 106, 123, 456
         writeln(entry.value); // 198, 7, 99
     }
 
-    foreach(ref entry; array[].retro())
+    // Slice and reverse
+    foreach(entry; array[].retro())
     {
         writeln(entry.index); // 456, 123, 106
         writeln(entry.value); // 99, 7, 198
@@ -136,6 +138,9 @@ Class example:
 ```d
 class Foo
 {
+    void bar()
+    {
+    }
 }
 
 void main()
@@ -143,6 +148,23 @@ void main()
     auto array = JudyLArray!Foo();
 
     array[123] = new Foo();
+
+    array[123].bar();
+
+    // No element at 124, opIndex throws RangeError
+    assertThrown!RangeError(array[124]);
+
+    // Can do a contains check safely using has
+    assert(array.has(123));
+
+    // Can get element safely without using exceptions
+    // returns true if the element was present and deposits it into
+    // the supplied parameter
+    Foo myFoo;
+    if (array.at(123, myFoo))
+    {
+        myFoo.bar();
+    }
 }
 
 ```
@@ -152,27 +174,84 @@ Struct example:
 ```d
 struct Bar
 {
+    int id;
 }
 
 void main()
 {
     auto array = JudyLArray!(Bar*)();
 
-    array[123] = new Bar();
+    array[0] = new Bar(0);
+    array[1] = new Bar(1);
+    array[100] = new Bar(100);
+
+    // Can search array from a given starting point
+    // Returns true if a next elements exists, else false
+    // Deposits the index of next element if found into index parameters
+    // Deposits the next element if found into the supplied
+    // parameter
+    size_t index = 50;
+    Bar* found;
+    if (array.next(index, found))
+    {
+        // Element found at 100, index is updated to 100 and found set
+        assert(index == 100);
+        assert(found.id == 100);
+    }
+
+    // Can also search backwards
+    index = 50;
+    if (array.prev(index, found))
+    {
+        // Element found at 1, index is updated to 1 and found set
+        assert(index == 1);
+        assert(found.id == 1);
+    }
+
+    // Find the first and last elements in similiar way
+    if (array.first(index, found))
+    {
+        assert(index == 0);
+        assert(found.id == 0);
+    }
+    if (array.last(index, found))
+    {
+        assert(index == 100);
+        assert(found.id == 100);
+    }
+
+    // Find the next/prev/first/last empty slot in the array
+    index = 1;
+    if (array.nextEmpty(index))
+    {
+        assert(index == 2);
+    }
+    // No previous slot available before 2
+    assert(array.prevEmpty(index) == false)
+
+    index = 0;
+    if (array.firstEmpty(index))
+    {
+        assert(index == 2);
+    }
+    if (array.lastEmpty(index))
+    {
+        assert(index == size_t.max);
+    }
 }
 ```
 
 ### Memory Considerations
 
-Because the underlying libJudy is implemented in C, objects passed to JudyLArray may be garbage collected if the only reference to them is from within the libjudy structure (which exists in non GC space).  Thus by default whenever a non scalar is passed to JudyLArray (ie a class, struct pointer, scalar pointer) it will automatically call GC.addRoot to ensure that the memory will not be collected.  When an item is removed from JudyLArray the root will also be removed.
+Because the underlying libJudy is implemented in C, objects passed to JudyLArray may be garbage collected if the only reference to them is from within the libjudy structure (which exists in non GC space).  Thus by default whenever a variable with indirections is passed to a JudyLArray (ie a class, struct pointer, scalar pointer) it will automatically call GC.addRoot to ensure that the memory will not be collected.  When an item is removed the root will also be removed.
 
-When a JudyLArray goes out of scope it will be freed, as well as removing GC roots for every item in the array.
+When a JudyLArray goes out of scope it will be freed, removing GC roots for every item in the array so that they can be reclaimed by the GC.
 
-If you are using malloced memory or your own allocator you can turn off the default GC behaviour by passing `false` as the second template parameter.  Note that you should then explicitly free your array contents as this memory may become unreachable and leak.
+If you are using malloced memory or allocators you can turn off the default GC behaviour by passing `false` as the second template parameter.  Note that you should then explicitly free your JudyLArray contents as this memory may become unreachable and leak.
 
 Arrays are not supported as dynamic and associative arrays may be moved when resized, causing the pointer in libjudy to become invalidated.
 
-*NOTE*: Passing in pointers to anything on the stack is very bad and will probably cause nasty things to happen.  JudyLArray assumes (other than for primitives which it just copies into itself) that your items are long living and won't be freed out from underneath it. If you do use items on the stack make sure they don't go out of scope for the lifetime of the array.  You have been warned.  
+*NOTE*: Passing in pointers to anything on the stack is very bad and will probably cause nasty things to happen.  JudyLArray assumes (other than for scalars which it just copies into itself) that your items are long living and won't be freed out from underneath it. If you do use items on the stack make sure they don't go out of scope for the lifetime of the array.  You have been warned.  
 
 ### Judy1 API
 
