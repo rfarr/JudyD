@@ -34,10 +34,11 @@ import judy.libjudy;
     that your items are long living and won't be freed
     out from underneath it. You have been warned.
 */
+
 struct JudyLArray(ElementType, bool UseGC = true) if (
-    isPointer!ElementType && !isArray!(PointerTarget!ElementType) ||
-    is(ElementType : Object) ||
-    isScalarType!ElementType
+    isPointer!ElementType || // ElementType is a pointer
+    is(ElementType : Object) || // ElementType is an object
+    isScalarType!ElementType // ElementType is a scalar
 )
 {
     public:
@@ -671,24 +672,47 @@ unittest
 {
     writeln("[UnitTest JudyL] - at");
 
-    auto array = JudyLArray!Data();
+    {
+        auto array = JudyLArray!Data();
 
-    auto data0 = new Data(0);
-    auto data1 = new Data(1);
+        auto data0 = new Data(0);
+        auto data1 = new Data(1);
 
-    Data value;
+        Data value;
 
-    assert(!array.at(0, value), "Array doesn't have element");
-    assert(!array.at(1, value), "Array doesn't have element");
+        assert(!array.at(0, value), "Array doesn't have element");
+        assert(!array.at(1, value), "Array doesn't have element");
 
-    array[0] = data0;
-    array[1] = data1;
+        array[0] = data0;
+        array[1] = data1;
 
-    assert(array.at(0, value), "Array has element");
-    assert(value == data0);
+        assert(array.at(0, value), "Array has element");
+        assert(value == data0);
 
-    assert(array.at(1, value), "Array has element");
-    assert(value == data1);
+        assert(array.at(1, value), "Array has element");
+        assert(value == data1);
+    }
+
+    {
+        auto array = JudyLArray!(Point*)();
+
+        auto point0 = new Point(0, 0);
+        auto point1 = new Point(1, 1);
+
+        Point* value;
+
+        assert(!array.at(0, value), "Array doesn't have element");
+        assert(!array.at(1, value), "Array doesn't have element");
+
+        array[0] = point0;
+        array[1] = point1;
+
+        assert(array.at(0, value), "Array has element");
+        assert(value == point0);
+
+        assert(array.at(1, value), "Array has element");
+        assert(value == point1);
+    }
 }
 
 unittest
@@ -1925,4 +1949,42 @@ unittest
 
     array.remove(0);
     array.remove(1);
+}
+
+unittest
+{
+    writeln("[UnitTest JudyL] - type restrictions");
+
+    assert(__traits(compiles, JudyLArray!Data), "Classes are allowed");
+    assert(__traits(compiles, JudyLArray!(Data*)), "Pointers to class are allowed");
+    assert(!__traits(compiles, JudyLArray!Point), "Structs are not allowed");
+    assert(__traits(compiles, JudyLArray!(Point*)), "Pointers to struct are allowed");
+    assert(!__traits(compiles, JudyLArray!(Data[])), "Arrays are not allowed");
+    assert(__traits(compiles, JudyLArray!(Data[]*)), "Pointers to arrays allowed");
+
+    assert(__traits(compiles, JudyLArray!(long)), "long allowed");
+    assert(__traits(compiles, JudyLArray!(ulong)), "ulong allowed");
+    assert(__traits(compiles, JudyLArray!(int)), "int allowed");
+    assert(__traits(compiles, JudyLArray!(uint)), "uint allowed");
+    assert(__traits(compiles, JudyLArray!(short)), "short allowed");
+    assert(__traits(compiles, JudyLArray!(ushort)), "ushort allowed");
+    assert(__traits(compiles, JudyLArray!(double)), "double allowed");
+    assert(__traits(compiles, JudyLArray!(float)), "float allowed");
+    assert(__traits(compiles, JudyLArray!(byte)), "byte allowed");
+    assert(__traits(compiles, JudyLArray!(ubyte)), "ubyte allowed");
+    assert(__traits(compiles, JudyLArray!(char)), "char allowed");
+    assert(__traits(compiles, JudyLArray!(bool)), "bool allowed");
+
+    assert(__traits(compiles, JudyLArray!(long*)), "long pointer allowed");
+    assert(__traits(compiles, JudyLArray!(ulong*)), "ulong pointer allowed");
+    assert(__traits(compiles, JudyLArray!(int*)), "int pointer allowed");
+    assert(__traits(compiles, JudyLArray!(uint*)), "uint pointer allowed");
+    assert(__traits(compiles, JudyLArray!(short*)), "short pointer allowed");
+    assert(__traits(compiles, JudyLArray!(ushort*)), "ushort pointer allowed");
+    assert(__traits(compiles, JudyLArray!(double*)), "double pointer allowed");
+    assert(__traits(compiles, JudyLArray!(float*)), "float pointer allowed");
+    assert(__traits(compiles, JudyLArray!(byte*)), "byte pointer allowed");
+    assert(__traits(compiles, JudyLArray!(ubyte*)), "ubyte pointer allowed");
+    assert(__traits(compiles, JudyLArray!(char*)), "char pointer allowed");
+    assert(__traits(compiles, JudyLArray!(bool*)), "bool pointer allowed");
 }
